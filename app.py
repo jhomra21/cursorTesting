@@ -2,6 +2,9 @@ from flask import Flask, request, render_template, redirect, url_for, flash
 import replicate
 import os
 from collections import deque
+from werkzeug.utils import secure_filename
+import zipfile
+from datetime import datetime
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # Set a secret key for flash messages
@@ -17,6 +20,16 @@ os.environ["REPLICATE_API_TOKEN"] = replicate_api_token
 # Add these variables at the top of the file, after the imports
 CURRENT_MODEL = "lucataco/flux-dev-lora"
 CURRENT_LORA = "jhomra21/elsapon-LoRA"
+
+# Add these constants after the existing ones
+UPLOAD_FOLDER = 'uploads'
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
+
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 # get most recent predictions using replicate api, then limit to 10
 def get_recent_predictions():
@@ -79,6 +92,35 @@ def generate_image():
     return render_template("index.html", image_url=image_url, prompt=prompt, 
                            recent_predictions=recent_predictions,
                            model_name=model_name, lora_name=lora_name)
+
+@app.route('/upload', methods=['GET', 'POST'])
+def upload_images():
+    if request.method == 'POST':
+        if 'files[]' not in request.files:
+            flash('No file part', 'error')
+            return redirect(request.url)
+        files = request.files.getlist('files[]')
+        
+        # Create the uploads directory if it doesn't exist
+        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+        
+        # Create a timestamp for the zip file name
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        zip_filename = f"user_images_{timestamp}.zip"
+        zip_path = os.path.join(app.config['UPLOAD_FOLDER'], zip_filename)
+        
+        with zipfile.ZipFile(zip_path, 'w') as zipf:
+            for file in files:
+                if file and allowed_file(file.filename):
+                    filename = secure_filename(file.filename)
+                    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                    file.save(file_path)
+                    zipf.write(file_path, filename)
+                    os.remove(file_path)  # Remove the individual file after adding to zip
+        
+        flash(f'Files uploaded and zipped successfully as {zip_filename}', 'success')
+        return redirect(url_for('upload_images'))
+    return render_template('upload.html')
 
 if __name__ == "__main__":
     app.run(debug=True)
