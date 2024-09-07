@@ -20,7 +20,7 @@ Set up the Replicate API token:
   
 Run the application:
 Open a web browser and go to http://localhost:5000.
-Additional notes for:
+Additional notes:
 Make sure to keep the Replicate API token confidential and not share it publicly.
 The application uses Tailwind CSS, extra set up might be needed, this article might help("https://flowbite.com/docs/getting-started/flask/")
 If any issues occur, make sure all the files are in the correct locations and that the Replicate API token is set correctly in the .env file. 
