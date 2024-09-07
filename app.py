@@ -40,7 +40,7 @@ def generate_image():
             num_inference_steps = int(request.form["num_inference_steps"])
             guidance_scale = float(request.form["guidance_scale"])
             lora_scale = float(request.form["lora_scale"])
-            
+            # try is here to catch errors from the replicate api
             try:
                 output = replicate.run(
                     "lucataco/flux-dev-lora:a22c463f11808638ad5e2ebd582e07a469031f48dd567366fb4c6fdab91d614d",
@@ -67,6 +67,8 @@ def generate_image():
     
     # call get_recent_predictions function and pass it to the html template
     recent_predictions = get_recent_predictions()
+
+    # render html template
     return render_template("index.html", image_url=image_url, prompt=prompt, recent_predictions=recent_predictions)
 
 if __name__ == "__main__":
