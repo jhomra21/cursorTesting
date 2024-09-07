@@ -14,6 +14,9 @@ load_dotenv()
 replicate_api_token = os.getenv("REPLICATE_API_TOKEN")
 os.environ["REPLICATE_API_TOKEN"] = replicate_api_token
 
+# Add these variables at the top of the file, after the imports
+CURRENT_MODEL = "lucataco/flux-dev-lora"
+CURRENT_LORA = "jhomra21/elsapon-LoRA"
 
 # get most recent predictions using replicate api, then limit to 10
 def get_recent_predictions():
@@ -68,8 +71,14 @@ def generate_image():
     # call get_recent_predictions function and pass it to the html template
     recent_predictions = get_recent_predictions()
 
-    # render html template
-    return render_template("index.html", image_url=image_url, prompt=prompt, recent_predictions=recent_predictions)
+    # Add these lines before rendering the template
+    model_name = CURRENT_MODEL.split(":")[0]
+    lora_name = CURRENT_LORA.split("/")[-1] if CURRENT_LORA else "None"
+
+    # Update the render_template call
+    return render_template("index.html", image_url=image_url, prompt=prompt, 
+                           recent_predictions=recent_predictions,
+                           model_name=model_name, lora_name=lora_name)
 
 if __name__ == "__main__":
     app.run(debug=True)
