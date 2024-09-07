@@ -1,4 +1,4 @@
-This is simple flask app that lets me generate images from replicate api. using flux-dev from lucataco and applying a custom lora with huggingface repo, trained on pictures of my face.
+This is a simple flask app that lets me generate images from replicate api. using flux-dev from lucataco and applying a custom lora with huggingface repo, trained on pictures of my face.
 
 Prerequisites:
 Make sure Python 3.7 or higher is installed on the system.
