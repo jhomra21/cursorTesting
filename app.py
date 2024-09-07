@@ -82,3 +82,8 @@ def generate_image():
 
 if __name__ == "__main__":
     app.run(debug=True)
+
+
+
+# if you made it this far, thank you for checking out my code!
+# feel free to message me on x (jhomra21) if you have notice any mistakes, feedback, or if you'd like to chat!
