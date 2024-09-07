@@ -14,9 +14,8 @@ load_dotenv()
 replicate_api_token = os.getenv("REPLICATE_API_TOKEN")
 os.environ["REPLICATE_API_TOKEN"] = replicate_api_token
 
-# Store the last 5 generated images
-last_images = deque(maxlen=5)
 
+# get most recent predictions using replicate api, then limit to 10
 def get_recent_predictions():
     client = replicate.Client(api_token=replicate_api_token)
     predictions = list(client.predictions.list())[:10]  # Fetch all and slice the first 10
@@ -30,6 +29,7 @@ def get_recent_predictions():
         if pred.status == "succeeded" and pred.output
     ]
 
+# main route
 @app.route("/", methods=["GET", "POST"])
 def generate_image():
     image_url = None
@@ -58,8 +58,6 @@ def generate_image():
                 )
                 image_url = output[0]
                 
-                # Add the new image to the last_images list
-                last_images.appendleft({"url": image_url, "prompt": prompt})
             except replicate.exceptions.ModelError as e:
                 if "NSFW" in str(e):
                     flash("NSFW content detected. Please try a different prompt.", "error")
@@ -67,8 +65,9 @@ def generate_image():
                     flash(f"An error occurred: {str(e)}", "error")
                 return redirect(url_for('generate_image'))
     
+    # call get_recent_predictions function and pass it to the html template
     recent_predictions = get_recent_predictions()
-    return render_template("index.html", image_url=image_url, prompt=prompt, last_images=list(last_images), recent_predictions=recent_predictions)
+    return render_template("index.html", image_url=image_url, prompt=prompt, recent_predictions=recent_predictions)
 
 if __name__ == "__main__":
     app.run(debug=True)
