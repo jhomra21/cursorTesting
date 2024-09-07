@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Generator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center">
+    <div class="bg-white p-8 rounded-lg shadow-md w-full max-w-4xl">
+        <h1 class="text-3xl font-bold mb-6 text-center">Image Generator</h1>
+        
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="mb-4 p-4 rounded-md {% if category == 'error' %}bg-red-100 text-red-700{% else %}bg-green-100 text-green-700{% endif %}">
+                        {{ message }}
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        {% if image_url %}
+            <h2 class="text-xl font-semibold mb-4 text-center">Generated Image</h2>
+            <img src="{{ image_url }}" alt="Generated Image" class="w-full mb-4 rounded-lg">
+            <p class="text-center mb-4 italic">"{{ prompt }}"</p>
+            <div class="text-center mb-8">
+                <a href="/" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Generate another image</a>
+            </div>
+        {% else %}
+            <form method="post" class="space-y-4 mb-8">
+                <input type="text" name="prompt" placeholder="Enter a prompt" required class="w-full px-3 py-2 border rounded-md">
+                <div class="space-y-2">
+                    <label for="num_inference_steps" class="block">Inference Steps: <span id="num_inference_steps_value">25</span></label>
+                    <input type="range" id="num_inference_steps" name="num_inference_steps" min="1" max="50" value="25" class="w-full">
+                </div>
+                <div class="space-y-2">
+                    <label for="guidance_scale" class="block">Guidance Scale: <span id="guidance_scale_value">7.5</span></label>
+                    <input type="range" id="guidance_scale" name="guidance_scale" min="1" max="10" step="0.1" value="3.5" class="w-full">
+                </div>
+                <div class="space-y-2">
+                    <label for="lora_scale" class="block">LoRA Scale: <span id="lora_scale_value">0.6</span></label>
+                    <input type="range" id="lora_scale" name="lora_scale" min="0" max="1" step="0.01" value="0.8" class="w-full">
+                </div>
+                <div class="text-center">
+                    <input type="submit" value="Generate Image" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600 cursor-pointer">
+                </div>
+            </form>
+        {% endif %}
+
+        {% if recent_predictions %}
+            <h2 class="text-2xl font-semibold mb-4 text-center">Recent Predictions</h2>
+            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                {% for prediction in recent_predictions %}
+                    <div class="flex flex-col items-center">
+                        {% if prediction.url %}
+                            <img src="{{ prediction.url }}" alt="Generated Image" class="w-full h-32 object-cover rounded-lg mb-2">
+                        {% else %}
+                            <div class="w-full h-32 bg-gray-200 flex items-center justify-center rounded-lg mb-2">
+                                <span class="text-gray-500">No image</span>
+                            </div>
+                        {% endif %}
+                        <p class="text-xs text-center italic truncate w-full">"{{ prediction.prompt }}"</p>
+                        <p class="text-xs text-center text-gray-500">{{ prediction.status }}</p>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    </div>
+
+    <script>
+        function updateSliderValue(sliderId) {
+            const slider = document.getElementById(sliderId);
+            const output = document.getElementById(sliderId + '_value');
+            output.innerHTML = slider.value;
+            slider.oninput = function() {
+                output.innerHTML = this.value;
+            }
+        }
+
+        updateSliderValue('num_inference_steps');
+        updateSliderValue('guidance_scale');
+        updateSliderValue('lora_scale');
+    </script>
+</body>
+</html>
