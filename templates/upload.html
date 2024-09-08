@@ -20,19 +20,80 @@
             {% endif %}
         {% endwith %}
 
-        <form method="post" enctype="multipart/form-data" class="space-y-4 mb-8">
+        <form id="uploadForm" method="post" enctype="multipart/form-data" class="space-y-4 mb-8">
             <div class="space-y-2">
                 <label for="files" class="block text-sm font-medium text-gray-700">Choose images to upload</label>
                 <input type="file" id="files" name="files[]" multiple accept=".png,.jpg,.jpeg,.gif" class="w-full px-3 py-2 border rounded-md">
             </div>
             <div class="text-center">
-                <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Upload and Zip Images</button>
+                <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Upload and Start Training</button>
             </div>
         </form>
         
-        <div class="text-center">
+        <div id="loadingState" class="hidden">
+            <div class="text-center mb-4">
+                <p class="text-lg font-semibold">Training in progress...</p>
+                <p id="progressText" class="text-sm text-gray-600"></p>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
+                <div id="progressBar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
+            </div>
+        </div>
+        
+        <div class="text-center mt-4">
             <a href="/" class="text-blue-500 hover:underline">Back to Image Generator</a>
         </div>
     </div>
+
+    <script>
+        document.getElementById('uploadForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const formData = new FormData(this);
+            
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    document.getElementById('loadingState').classList.remove('hidden');
+                    document.getElementById('progressText').textContent = `New model created: ${data.model_name}`;
+                    checkTrainingStatus(data.training_id);
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while uploading.');
+            });
+        });
+
+        function checkTrainingStatus(trainingId) {
+            fetch(`/training_status/${trainingId}`)
+            .then(response => response.json())
+            .then(data => {
+                const progressText = document.getElementById('progressText');
+                
+                if (data.error) {
+                    progressText.textContent = 'Error: ' + data.error;
+                    return;
+                }
+                
+                progressText.textContent = `Status: ${data.status} | Elapsed Time: ${data.elapsed_time}`;
+                
+                if (!data.completed) {
+                    setTimeout(() => checkTrainingStatus(trainingId), 5000); // Check every 5 seconds
+                } else {
+                    progressText.textContent = 'Training completed!';
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                document.getElementById('progressText').textContent = 'Error checking training status.';
+            });
+        }
+    </script>
 </body>
 </html>

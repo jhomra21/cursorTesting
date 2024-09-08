@@ -1,10 +1,14 @@
-from flask import Flask, request, render_template, redirect, url_for, flash
+from flask import Flask, request, render_template, redirect, url_for, flash, jsonify
 import replicate
 import os
 from collections import deque
 from werkzeug.utils import secure_filename
 import zipfile
-from datetime import datetime
+from datetime import datetime, timezone
+import shutil
+from replicate.client import Client
+# import requests
+# from requests.exceptions import RequestException
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # Set a secret key for flash messages
@@ -15,6 +19,7 @@ load_dotenv()
 
 # Get the Replicate API token from the environment variables
 replicate_api_token = os.getenv("REPLICATE_API_TOKEN")
+hf_token = os.getenv("HF_TOKEN")
 os.environ["REPLICATE_API_TOKEN"] = replicate_api_token
 
 # Add these variables at the top of the file, after the imports
@@ -22,7 +27,7 @@ CURRENT_MODEL = "lucataco/flux-dev-lora"
 CURRENT_LORA = "jhomra21/elsapon-LoRA"
 
 # Add these constants after the existing ones
-UPLOAD_FOLDER = 'uploads'
+UPLOAD_FOLDER = '/'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
@@ -106,7 +111,7 @@ def upload_images():
         
         # Create a timestamp for the zip file name
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        zip_filename = f"user_images_{timestamp}.zip"
+        zip_filename = f"input_images_{timestamp}.zip"
         zip_path = os.path.join(app.config['UPLOAD_FOLDER'], zip_filename)
         
         with zipfile.ZipFile(zip_path, 'w') as zipf:
@@ -118,9 +123,68 @@ def upload_images():
                     zipf.write(file_path, filename)
                     os.remove(file_path)  # Remove the individual file after adding to zip
         
-        flash(f'Files uploaded and zipped successfully as {zip_filename}', 'success')
-        return redirect(url_for('upload_images'))
+        try:
+            # Create a new model on Replicate
+            new_model = replicate.models.create(
+                owner="jhomra21",
+                name="elsapon-lora-" + datetime.now().strftime("%Y%m%d-%H%M%S"),
+                visibility="private",
+                hardware="gpu-a100-large"
+            )
+
+            # Create the training using Replicate API
+            with open(zip_path, 'rb') as zip_file:
+                zip_contents = zip_file.read()
+                training = replicate.trainings.create(
+                    version="lucataco/ai-toolkit:06e50f60983aa9ad9e4c13ba1d56ee235925ee6bd1c604d94c26a3322aeb8d47",
+                    input={
+                        "steps": 1000,
+                        "input_images": zip_contents,
+                        "repo_id": "jhomra21/elsapon-LoRA",
+                        "hf_token": hf_token,
+                        "batch_size": 1,
+                        "model_name": "black-forest-labs/FLUX.1-dev",
+                        "resolution": "512,768,1024",
+                        "lora_linear": 16,
+                        "learning_rate": 0.0004,
+                        "lora_linear_alpha": 16
+                    },
+                    destination=f"jhomra21/{new_model.name}"
+                )
+            
+            flash(f'New model created and training started. Model: {new_model.name}, Training ID: {training.id}', 'success')
+            return jsonify({"status": "success", "training_id": training.id, "model_name": new_model.name})
+        except Exception as e:
+            flash(f'Error creating model or starting training: {str(e)}', 'error')
+            return jsonify({"status": "error", "message": str(e)})
+        finally:
+            os.remove(zip_path)  # Remove the zip file after sending or if an error occurs
+    
     return render_template('upload.html')
+
+@app.route('/training_status/<training_id>')
+def training_status(training_id):
+    try:
+        training = replicate.trainings.get(training_id)
+        
+        # Calculate elapsed time
+        start_time = training.created_at
+        current_time = datetime.now(timezone.utc)
+        elapsed_time = current_time - start_time
+        
+        # Convert to hours, minutes, seconds
+        hours, remainder = divmod(int(elapsed_time.total_seconds()), 3600)
+        minutes, seconds = divmod(remainder, 60)
+        
+        elapsed_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        
+        return jsonify({
+            "status": training.status,
+            "elapsed_time": elapsed_str,
+            "completed": training.completed_at is not None
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
 
 if __name__ == "__main__":
     app.run(debug=True)
