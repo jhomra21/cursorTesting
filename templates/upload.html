@@ -23,7 +23,11 @@
         <form id="uploadForm" method="post" enctype="multipart/form-data" class="space-y-4 mb-8">
             <div class="space-y-2">
                 <label for="files" class="block text-sm font-medium text-gray-700">Choose images to upload</label>
-                <input type="file" id="files" name="files[]" multiple accept=".png,.jpg,.jpeg,.gif" class="w-full px-3 py-2 border rounded-md">
+                <input type="file" id="files" name="files[]" multiple accept=".png,.jpg,.jpeg" class="w-full px-3 py-2 border rounded-md">
+            </div>
+            <div class="space-y-2">
+                <label for="trigger_word" class="block text-sm font-medium text-gray-700">Trigger Word</label>
+                <input type="text" id="trigger_word" name="trigger_word" required class="w-full px-3 py-2 border rounded-md">
             </div>
             <div class="text-center">
                 <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Upload and Start Training</button>

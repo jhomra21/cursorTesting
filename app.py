@@ -5,8 +5,9 @@ from collections import deque
 from werkzeug.utils import secure_filename
 import zipfile
 from datetime import datetime, timezone
-import shutil
-from replicate.client import Client
+import base64
+import io
+
 # import requests
 # from requests.exceptions import RequestException
 
@@ -27,10 +28,14 @@ CURRENT_MODEL = "lucataco/flux-dev-lora"
 CURRENT_LORA = "jhomra21/elsapon-LoRA"
 
 # Add these constants after the existing ones
-UPLOAD_FOLDER = '/'
+UPLOAD_FOLDER = 'input_images'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
+TRIGGER_WORD = "elsapon"
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+if not os.path.exists(UPLOAD_FOLDER):
+    os.makedirs(UPLOAD_FOLDER)
 
 def allowed_file(filename):
     return '.' in filename and \
@@ -39,7 +44,7 @@ def allowed_file(filename):
 # get most recent predictions using replicate api, then limit to 10
 def get_recent_predictions():
     client = replicate.Client(api_token=replicate_api_token)
-    predictions = list(client.predictions.list())[:10]  # Fetch all and slice the first 10
+    predictions = list(client.predictions.list())[:20]  # Fetch all and slice the first 10
     return [
         {
             "url": pred.output[0] if pred.output and isinstance(pred.output, list) else None,
@@ -64,17 +69,17 @@ def generate_image():
             # try is here to catch errors from the replicate api
             try:
                 output = replicate.run(
-                    "lucataco/flux-dev-lora:a22c463f11808638ad5e2ebd582e07a469031f48dd567366fb4c6fdab91d614d",
+                    "jhonra121/elsapon-lora-20240909-135442:1a124ff1be6c79a21912d760d5ff7f487e80dc1c5366147586beab5a0a0296c3",
                     input={
                         "prompt": prompt,
-                        "hf_lora": "jhomra21/elsapon-LoRA",
-                        "num_inference_steps": num_inference_steps,
-                        "guidance_scale": guidance_scale,
-                        "width": 512,
-                        "height": 512,
+                        "model": "dev",
+                        "lora_scale": lora_scale,
                         "num_outputs": 1,
-                        "output_quality": 80,
-                        "lora_scale": lora_scale
+                        "aspect_ratio": "1:1",
+                        "output_format": "webp",
+                        "guidance_scale": guidance_scale,
+                        "output_quality": 90,
+                        "num_inference_steps": num_inference_steps
                     }
                 )
                 image_url = output[0]
@@ -86,6 +91,9 @@ def generate_image():
                     flash(f"An error occurred: {str(e)}", "error")
                 return redirect(url_for('generate_image'))
     
+    # Get the latest trigger word (you'll need to implement this function)
+    trigger_word = get_latest_trigger_word()
+
     # call get_recent_predictions function and pass it to the html template
     recent_predictions = get_recent_predictions()
 
@@ -96,7 +104,13 @@ def generate_image():
     # Update the render_template call
     return render_template("index.html", image_url=image_url, prompt=prompt, 
                            recent_predictions=recent_predictions,
-                           model_name=model_name, lora_name=lora_name)
+                           model_name=model_name, lora_name=lora_name,
+                           trigger_word=trigger_word)  # Pass trigger_word to the template
+
+def get_latest_trigger_word():
+    # Implement this function to retrieve the latest trigger word
+    # For now, we'll return a default value
+    return TRIGGER_WORD
 
 @app.route('/upload', methods=['GET', 'POST'])
 def upload_images():
@@ -106,61 +120,69 @@ def upload_images():
             return redirect(request.url)
         files = request.files.getlist('files[]')
         
-        # Create the uploads directory if it doesn't exist
-        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+        if not files or files[0].filename == '':
+            flash('No selected files', 'error')
+            return redirect(request.url)
         
-        # Create a timestamp for the zip file name
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        zip_filename = f"input_images_{timestamp}.zip"
-        zip_path = os.path.join(app.config['UPLOAD_FOLDER'], zip_filename)
-        
-        with zipfile.ZipFile(zip_path, 'w') as zipf:
+        trigger_word = request.form.get('trigger_word')
+        if not trigger_word:
+            flash('Trigger word is required', 'error')
+            return redirect(request.url)
+        TRIGGER_WORD = trigger_word
+        # Create a zip file in memory
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, 'w') as zipf:
             for file in files:
                 if file and allowed_file(file.filename):
                     filename = secure_filename(file.filename)
-                    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                    file.save(file_path)
-                    zipf.write(file_path, filename)
-                    os.remove(file_path)  # Remove the individual file after adding to zip
+                    zipf.writestr(filename, file.read())
+        
+        # Reset the buffer position to the beginning
+        zip_buffer.seek(0)
         
         try:
             # Create a new model on Replicate
             new_model = replicate.models.create(
-                owner="jhomra21",
+                owner="jhonra121",
                 name="elsapon-lora-" + datetime.now().strftime("%Y%m%d-%H%M%S"),
                 visibility="private",
                 hardware="gpu-a100-large"
             )
 
+            # Convert zip_buffer to base64 and create a data URI
+            zip_base64 = base64.b64encode(zip_buffer.getvalue()).decode('utf-8')
+            zip_uri = f"data:application/zip;base64,{zip_base64}"
+
+            # Create the hf_repo_id with the trigger word
+            hf_repo_id = f"jhomra21/{trigger_word}-LoRA"
+
             # Create the training using Replicate API
-            with open(zip_path, 'rb') as zip_file:
-                zip_contents = zip_file.read()
-                training = replicate.trainings.create(
-                    version="lucataco/ai-toolkit:06e50f60983aa9ad9e4c13ba1d56ee235925ee6bd1c604d94c26a3322aeb8d47",
-                    input={
-                        "steps": 1000,
-                        "input_images": zip_contents,
-                        "repo_id": "jhomra21/elsapon-LoRA",
-                        "hf_token": hf_token,
-                        "batch_size": 1,
-                        "model_name": "black-forest-labs/FLUX.1-dev",
-                        "resolution": "512,768,1024",
-                        "lora_linear": 16,
-                        "learning_rate": 0.0004,
-                        "lora_linear_alpha": 16
-                    },
-                    destination=f"jhomra21/{new_model.name}"
-                )
+            training = replicate.trainings.create(
+                destination=f"jhonra121/{new_model.name}",
+                version="ostris/flux-dev-lora-trainer:d995297071a44dcb72244e6c19462111649ec86a9646c32df56daa7f14801944",
+                input={
+                    "steps": 1000,
+                    "lora_rank": 16,
+                    "optimizer": "adamw8bit",
+                    "batch_size": 1,
+                    "resolution": "512,768,1024",
+                    "autocaption": True,
+                    "input_images": zip_uri,
+                    "trigger_word": trigger_word,
+                    "hf_repo_id": hf_repo_id,  # Use the new hf_repo_id with trigger word
+                    "hf_token": hf_token,
+                    "learning_rate": 0.0004,
+                },
+            )
             
             flash(f'New model created and training started. Model: {new_model.name}, Training ID: {training.id}', 'success')
             return jsonify({"status": "success", "training_id": training.id, "model_name": new_model.name})
         except Exception as e:
             flash(f'Error creating model or starting training: {str(e)}', 'error')
             return jsonify({"status": "error", "message": str(e)})
-        finally:
-            os.remove(zip_path)  # Remove the zip file after sending or if an error occurs
     
     return render_template('upload.html')
+
 
 @app.route('/training_status/<training_id>')
 def training_status(training_id):

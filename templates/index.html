@@ -30,18 +30,21 @@
             </div>
         {% else %}
             <form method="post" class="space-y-4 mb-8" id="generateForm">
-                <input type="text" name="prompt" placeholder="Enter a prompt" required class="w-full px-3 py-2 border rounded-md">
                 <div class="space-y-2">
-                    <label for="num_inference_steps" class="block">Inference Steps: <span id="num_inference_steps_value">25</span></label>
-                    <input type="range" id="num_inference_steps" name="num_inference_steps" min="1" max="50" value="25" class="w-full">
+                    <input type="text" name="prompt" placeholder="{{ trigger_word }} in a beautiful garden" required class="w-full px-3 py-2 border rounded-md">
+                    <p class="text-sm text-gray-600 italic">Tip: Use "{{ trigger_word }}" to place the subject in the image</p>
                 </div>
                 <div class="space-y-2">
-                    <label for="guidance_scale" class="block">Guidance Scale: <span id="guidance_scale_value">7.5</span></label>
-                    <input type="range" id="guidance_scale" name="guidance_scale" min="1" max="10" step="0.1" value="3.5" class="w-full">
+                    <label for="num_inference_steps" class="block">Inference Steps: <span id="num_inference_steps_value">24</span></label>
+                    <input type="range" id="num_inference_steps" name="num_inference_steps" min="1" max="50" value="24" class="w-full">
                 </div>
                 <div class="space-y-2">
-                    <label for="lora_scale" class="block">LoRA Scale: <span id="lora_scale_value">0.6</span></label>
-                    <input type="range" id="lora_scale" name="lora_scale" min="0" max="1" step="0.01" value="0.8" class="w-full">
+                    <label for="guidance_scale" class="block">Guidance Scale: <span id="guidance_scale_value">3.5</span></label>
+                    <input type="range" id="guidance_scale" name="guidance_scale" min="0" max="10" step="0.1" value="3.5" class="w-full">
+                </div>
+                <div class="space-y-2">
+                    <label for="lora_scale" class="block">LoRA Scale: <span id="lora_scale_value">0.8</span></label>
+                    <input type="range" id="lora_scale" name="lora_scale" min="-1" max="2" step="0.01" value="0.8" class="w-full">
                 </div>
                 <div class="text-center space-y-4">
                     <div class="text-sm text-gray-600">
@@ -71,8 +74,11 @@
                                 <span class="text-gray-500">No image</span>
                             </div>
                         {% endif %}
-                        <p class="text-xs text-center italic truncate w-full">"{{ prediction.prompt }}"</p>
-                        <p class="text-xs text-center text-gray-500">{{ prediction.status }}</p>
+                        <p class="text-xs text-center italic truncate w-full mb-1">"{{ prediction.prompt }}"</p>
+                        <p class="text-xs text-center text-gray-500 mb-2">{{ prediction.status }}</p>
+                        {% if prediction.url %}
+                            <a href="{{ prediction.url }}" target="_blank" class="text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600 transition duration-300">Download</a>
+                        {% endif %}
                     </div>
                 {% endfor %}
             </div>
