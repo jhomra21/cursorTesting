@@ -4,88 +4,215 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Image Generator</title>
-    <link rel="stylesheet" href="{{url_for('static',filename='dist/css/output.css')}}">
-    <!-- <script src="https://cdn.tailwindcss.com"></script> -->
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            background-color: #e0e5e0;
+            color: #2c3e2c;
+            margin: 0;
+            padding: 2rem;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #d0d5d0;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        h1, h2 {
+            text-align: center;
+            color: #1a2b1a;
+        }
+        form {
+            display: flex;
+            flex-direction: column;
+        }
+        input, button, .slider {
+            padding: 0.5rem;
+            margin-top: 0.5rem;
+            border: 1px solid #4a5d4a;
+            border-radius: 4px;
+            background-color: #e8ede8;
+        }
+        button {
+            background-color: #4a5d4a;
+            color: #e0e5e0;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #3a4d3a;
+        }
+        .message {
+            margin-top: 1rem;
+            padding: 0.5rem;
+            border-radius: 4px;
+            text-align: center;
+        }
+        .error { background-color: #8b4a4a; color: #e0e5e0; }
+        .success { background-color: #4a8b4a; color: #e0e5e0; }
+        .logout {
+            text-align: right;
+            margin-bottom: 1rem;
+        }
+        .logout a, .login a, .signup a {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            background-color: #4a5d4a;
+            color: #e0e5e0;
+            text-decoration: none;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+        }
+        .logout a:hover, .login a:hover, .signup a:hover {
+            background-color: #3a4d3a;
+        }
+        .login, .signup {
+            display: inline-block;
+            margin-left: 0.5rem;
+        }
+        img {
+            max-width: 100%;
+            border-radius: 8px;
+            margin-top: 1rem;
+        }
+        .recent-predictions {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+        .prediction-item {
+            background-color: #e8ede8;
+            padding: 0.5rem;
+            border-radius: 4px;
+            text-align: center;
+        }
+        .prediction-item img {
+            width: 100%;
+            height: 100px;
+            object-fit: cover;
+            border-radius: 4px;
+        }
+        #loadingSpinner {
+            text-align: center;
+            margin-top: 1rem;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .generation-info {
+            background-color: #e8ede8;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-top: 1rem;
+            text-align: center;
+        }
+        .generation-info p {
+            margin: 0.5rem 0;
+            font-size: 0.9rem;
+        }
+    </style>
 </head>
-<body class="bg-gray-100 min-h-screen flex items-center justify-center">
-    <div class="bg-white p-8 rounded-lg shadow-md w-full max-w-4xl">
-        <h1 class="text-3xl font-bold mb-6 text-center">Image Generator</h1>
+<body>
+    <div class="container">
+        {% if is_logged_in %}
+        <div class="logout">
+            <a href="{{ url_for('logout') }}" style="display: inline-block; padding: 0.5rem 1rem; background-color: #4a5d4a; color: #e0e5e0; text-decoration: none; border-radius: 4px; transition: background-color 0.3s;">Logout</a>
+        </div>
+        {% else %}
+        <div class="logout">
+            <span class="login"><a href="{{ url_for('login') }}" style="display: inline-block; padding: 0.5rem 1rem; background-color: #4a5d4a; color: #e0e5e0; text-decoration: none; border-radius: 4px; transition: background-color 0.3s;">Login</a></span>
+            <span class="signup"><a href="{{ url_for('signup') }}" style="display: inline-block; padding: 0.5rem 1rem; background-color: #4a5d4a; color: #e0e5e0; text-decoration: none; border-radius: 4px; transition: background-color 0.3s;">Sign Up</a></span>
+        </div>
+        {% endif %}
+
+        <h1>Image Generator</h1>
         
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
-                    <div class="mb-4 p-4 rounded-md {% if category == 'error' %}bg-red-100 text-red-700{% else %}bg-green-100 text-green-700{% endif %}">
-                        {{ message }}
-                    </div>
+                    <div class="message {{ category }}">{{ message }}</div>
                 {% endfor %}
             {% endif %}
         {% endwith %}
-
+        <p>Welcome, {{ username }}!</p>
         {% if image_url %}
-            <h2 class="text-xl font-semibold mb-4 text-center">Generated Image</h2>
-            <img src="{{ image_url }}" alt="Generated Image" class="w-full mb-4 rounded-lg">
-            <p class="text-center mb-4 italic">"{{ prompt }}"</p>
-            <div class="text-center mb-8">
-                <a href="/" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Generate another image</a>
+            <h2>Generated Image</h2>
+            <img src="{{ image_url }}" alt="Generated Image">
+            <p class="message">"{{ prompt }}"</p>
+            {% if predict_time and total_time %}
+                <div class="generation-info">
+                    <p>Predict Time: {{ predict_time|round(2) }} seconds</p>
+                    <p>Total Time: {{ total_time|round(2) }} seconds</p>
+                </div>
+            {% endif %}
+            
+            <div style="text-align: center; margin-top: 1rem;">
+                <a href="/" class="logout" style="display: inline-block; padding: 0.5rem 1rem; background-color: #4a5d4a; color: #e0e5e0; text-decoration: none; border-radius: 4px; transition: background-color 0.3s;">Generate another image</a>
             </div>
         {% else %}
-            <form method="post" class="space-y-4 mb-8" id="generateForm">
-                <div class="space-y-2">
-                    <input type="text" name="prompt" placeholder="{{ trigger_word }} in a beautiful garden" required class="w-full px-3 py-2 border rounded-md">
-                    <p class="text-sm text-gray-600 italic">Tip: Use "{{ trigger_word }}" to place the subject in the image</p>
-                </div>
-                <div class="space-y-2">
-                    <label for="num_inference_steps" class="block">Inference Steps: <span id="num_inference_steps_value">24</span></label>
-                    <input type="range" id="num_inference_steps" name="num_inference_steps" min="1" max="50" value="24" class="w-full">
-                </div>
-                <div class="space-y-2">
-                    <label for="guidance_scale" class="block">Guidance Scale: <span id="guidance_scale_value">3.5</span></label>
-                    <input type="range" id="guidance_scale" name="guidance_scale" min="0" max="10" step="0.1" value="3.5" class="w-full">
-                </div>
-                <div class="space-y-2">
-                    <label for="lora_scale" class="block">LoRA Scale: <span id="lora_scale_value">0.8</span></label>
-                    <input type="range" id="lora_scale" name="lora_scale" min="-1" max="2" step="0.01" value="0.8" class="w-full">
-                </div>
-                <div class="text-center space-y-4">
-                    <div class="text-sm text-gray-600">
-                        <p>Model: <span class="font-semibold">{{ model_name }}</span></p>
-                        <p>LoRA: <span class="font-semibold">{{ lora_name }}</span></p>
-                    </div>
-                    <button type="submit" id="generateButton" class="bg-green-500 text-white disabled:opacity-50 disabled:cursor-not-allowed px-4 py-2 rounded hover:bg-green-600 cursor-pointer">
+            <form method="post" id="generateForm">
+                <input type="text" name="prompt" placeholder="{{ trigger_word }} in a beautiful garden" required>
+                <p style="font-style: italic; margin-top: 0.5rem;">Tip: Use "{{ trigger_word }}" to place the subject in the image</p>
+                
+                <label for="num_inference_steps">Inference Steps: <span id="num_inference_steps_value">24</span></label>
+                <input type="range" id="num_inference_steps" name="num_inference_steps" min="1" max="50" value="24" class="slider">
+                
+                <label for="guidance_scale">Guidance Scale: <span id="guidance_scale_value">3.5</span></label>
+                <input type="range" id="guidance_scale" name="guidance_scale" min="0" max="10" step="0.1" value="3.5" class="slider">
+                
+                <label for="lora_scale">LoRA Scale: <span id="lora_scale_value">0.8</span></label>
+                <input type="range" id="lora_scale" name="lora_scale" min="-1" max="2" step="0.01" value="0.8" class="slider">
+                
+                <div style="text-align: center; margin-top: 1rem;">
+                    <p>Model: <strong>{{ model_name }}</strong></p>
+                    <p>LoRA: <strong>{{ lora_name }}</strong></p>
+                    <button type="submit" id="generateButton" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition duration-150 ease-in-out">
                         Generate Image
                     </button>
-                    <div id="loadingSpinner" class="hidden mt-4">
-                        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-green-500 mx-auto"></div>
-                        <p class="text-sm text-gray-500 mt-2">Generating image...</p>
-                    </div>
                 </div>
             </form>
+            <div id="loadingSpinner" class="hidden mt-4">
+                <div class="spinner"></div>
+                <p class="text-sm text-gray-500 mt-2">Generating image...</p>
+            </div>
         {% endif %}
 
         {% if recent_predictions %}
-            <h2 class="text-2xl font-semibold mb-4 text-center">Recent Predictions</h2>
-            <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+            <h2>Recent Predictions</h2>
+            <div class="recent-predictions">
                 {% for prediction in recent_predictions %}
-                    <div class="flex flex-col items-center">
+                    <div class="prediction-item">
                         {% if prediction.url %}
-                            <img src="{{ prediction.url }}" alt="Generated Image" class="w-full h-32 object-cover rounded-lg mb-2">
+                            <img src="{{ prediction.url }}" alt="Generated Image">
                         {% else %}
-                            <div class="w-full h-32 bg-gray-200 flex items-center justify-center rounded-lg mb-2">
-                                <span class="text-gray-500">No image</span>
-                            </div>
+                            <div style="height: 100px; background-color: #4a5d4a; display: flex; align-items: center; justify-content: center; color: #e0e5e0;">No image</div>
                         {% endif %}
-                        <p class="text-xs text-center italic truncate w-full mb-1">"{{ prediction.prompt }}"</p>
-                        <p class="text-xs text-center text-gray-500 mb-2">{{ prediction.status }}</p>
+                        <p style="font-style: italic; font-size: 0.8rem; margin: 0.5rem 0;">"{{ prediction.prompt }}"</p>
+                        <p style="font-size: 0.8rem; margin: 0;">{{ prediction.status }}</p>
                         {% if prediction.url %}
-                            <a href="{{ prediction.url }}" target="_blank" class="text-xs bg-blue-500 text-white px-2 py-1 rounded hover:bg-blue-600 transition duration-300">Download</a>
+                            <a href="{{ prediction.url }}" target="_blank" style="font-size: 0.8rem; color: #4a5d4a;">Download</a>
                         {% endif %}
                     </div>
                 {% endfor %}
             </div>
         {% endif %}
 
-        <div class="text-center mt-4">
-            <a href="{{ url_for('upload_images') }}" class="text-blue-500 hover:underline">Upload Batch Images</a>
+        <div style="text-align: center; margin-top: 2rem;">
+            <a href="{{ url_for('upload_images') }}" style="color: #4a5d4a;">Upload Batch Images</a>
         </div>
     </div>
 
@@ -103,19 +230,45 @@
         updateSliderValue('guidance_scale');
         updateSliderValue('lora_scale');
 
-        // Updated JavaScript code
         document.addEventListener('DOMContentLoaded', function() {
             const form = document.getElementById('generateForm');
             const button = document.getElementById('generateButton');
             const spinner = document.getElementById('loadingSpinner');
 
-            // Ensure the spinner is hidden on page load
-            spinner.classList.add('hidden');
+            function disableButton() {
+                button.disabled = true;
+                button.style.opacity = '0.5';
+                button.style.cursor = 'not-allowed';
+            }
+
+            function enableButton() {
+                button.disabled = false;
+                button.style.opacity = '1';
+                button.style.cursor = 'pointer';
+            }
+
+            // Initially hide the spinner and enable the button
+            spinner.style.display = 'none';
+            enableButton();
 
             form.addEventListener('submit', function(e) {
-                button.disabled = true;
-                button.classList.add('disabled:true');
-                spinner.classList.remove('hidden');
+                e.preventDefault();
+                disableButton();
+                spinner.style.display = 'block';
+
+                fetch(form.action, {
+                    method: form.method,
+                    body: new FormData(form)
+                }).then(response => {
+                    return response.text();
+                }).then(html => {
+                    document.body.innerHTML = html;
+                    window.scrollTo(0, 0);
+                }).catch(error => {
+                    console.error('Error:', error);
+                    enableButton();
+                    spinner.style.display = 'none';
+                });
             });
         });
     </script>
