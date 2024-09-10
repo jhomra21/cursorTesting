@@ -157,6 +157,9 @@
                 <div class="generation-info">
                     <p>Predict Time: {{ predict_time|round(2) }} seconds</p>
                     <p>Total Time: {{ total_time|round(2) }} seconds</p>
+                    <p>LoRA Scale: {{ lora_scale }}</p>
+                    <p>Guidance Scale: {{ guidance_scale }}</p>
+                    <p>Inference Steps: {{ num_inference_steps }}</p>
                 </div>
             {% endif %}
             

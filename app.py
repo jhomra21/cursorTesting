@@ -45,7 +45,8 @@ UPLOAD_FOLDER = 'input_images'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 
 #TODO:   will be changed later and loaded from usr table in the database
-TRIGGER_WORD = "elsapon"
+TRIGGER_WORD = "ramon"
+NEW_MODEL_NAME="jhonra121/ramon-lora-20240910-154729"
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
@@ -88,16 +89,21 @@ def generate_image():
     prompt = None
     predict_time = None
     total_time = None
+    show_guidance_scale = None
+    show_num_inference_steps = None
+    show_lora_scale = None
+
     if request.method == "POST":
         prompt = request.form["prompt"]
         if prompt:
             num_inference_steps = int(request.form["num_inference_steps"])
             guidance_scale = float(request.form["guidance_scale"])
             lora_scale = float(request.form["lora_scale"])
-            # try is here to catch errors from the replicate api
+            model = replicate.models.get(NEW_MODEL_NAME)
+            version = model.versions.get("dd117084cca97542e09f6a2a458295054b4afb0b97417db068c20ff573997fc9")
             try:
                 output = replicate.run(
-                    "jhonra121/elsapon-lora-20240909-135442:1a124ff1be6c79a21912d760d5ff7f487e80dc1c5366147586beab5a0a0296c3",
+                    version,
                     input={
                         "prompt": prompt,
                         "model": "dev",
@@ -114,10 +120,13 @@ def generate_image():
                 
                 # Fetch the prediction details
                 prediction = replicate.predictions.list()[:1]
-                print(f"prediction: {prediction}")
-                print(f"prediction_id: {prediction[0].metrics}")
-                predict_time = prediction[0].metrics['predict_time']
-                total_time = prediction[0].metrics['total_time']
+                if prediction:
+                    predict_time = prediction[0].metrics.get('predict_time')
+                    total_time = prediction[0].metrics.get('total_time')
+                    show_guidance_scale = prediction[0].input['guidance_scale']
+                    show_num_inference_steps = prediction[0].input['num_inference_steps']
+                    show_lora_scale = prediction[0].input['lora_scale']
+                  
                 
             except replicate.exceptions.ModelError as e:
                 if "NSFW" in str(e):
@@ -133,7 +142,7 @@ def generate_image():
     recent_predictions = get_recent_predictions()
 
     # Add these lines before rendering the template
-    model_name = CURRENT_MODEL.split(":")[0]
+    model_name = NEW_MODEL_NAME
     lora_name = CURRENT_LORA.split("/")[-1] if CURRENT_LORA else "None"
 
     # Update the render_template call
@@ -152,10 +161,13 @@ def generate_image():
                            user_id=user_id,
                            username=username,
                            predict_time=predict_time,
-                           total_time=total_time
-                           )
-                        #    predict_time=predict_time,
-                        #    total_time=total_time)
+                           total_time=total_time,
+                           guidance_scale=show_guidance_scale,
+                           inference_steps=show_num_inference_steps,
+                           lora_scale=show_lora_scale)
+                        #    guidance_scale=new_guidance_scale,
+                        #    inference_steps=new_num_inference_steps,
+                        #    lora_scale=new_lora_scale)
 
 def get_latest_trigger_word():
     # Implement this function to retrieve the latest trigger word
@@ -211,7 +223,7 @@ def upload_images():
                 destination=f"jhonra121/{new_model.name}",
                 version="ostris/flux-dev-lora-trainer:d995297071a44dcb72244e6c19462111649ec86a9646c32df56daa7f14801944",
                 input={
-                    "steps": 1000,
+                    "steps": 800,
                     "lora_rank": 16,
                     "optimizer": "adamw8bit",
                     "batch_size": 1,
@@ -225,6 +237,8 @@ def upload_images():
                 },
             )
             
+            TRIGGER_WORD = trigger_word
+            NEW_MODEL_NAME = new_model.name
             flash(f'New model created and training started. Model: {new_model.name}, Training ID: {training.id}', 'success')
             return jsonify({"status": "success", "training_id": training.id, "model_name": new_model.name})
         except Exception as e:
