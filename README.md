@@ -5,6 +5,8 @@ This is a Flask application that generates images using the Replicate API. It ap
 Prerequisites
 -Python 3.7 or higher
 -pip (Python package manager)
+-docker(compose)
+-docker-postgres-pgadmin
 
 Setup
 -Clone this repository or download the source code.
