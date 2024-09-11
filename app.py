@@ -36,7 +36,7 @@ db = SQLAlchemy(app)
 # Get the Replicate API token from the environment variables
 replicate_api_token = os.getenv("REPLICATE_API_TOKEN")
 hf_token = os.getenv("HF_TOKEN")
-os.environ["REPLICATE_API_TOKEN"] = replicate_api_token
+# os.environ["REPLICATE_API_TOKEN"] = replicate_api_token
 
 # Add these variables at the top of the file, after the imports
 CURRENT_MODEL = "Flux-Dev"
@@ -69,6 +69,10 @@ class Users(db.Model):
 
     # Add this line to create the relationship
     models = db.relationship('Models', back_populates='user', cascade='all, delete-orphan')
+
+    def __init__(self, username, email):
+        self.username = username
+        self.email = email
 
     def set_password(self, password):
         if not password:
@@ -103,9 +107,16 @@ class Models(db.Model):
         db.UniqueConstraint('user_id', 'name', name='unique_user_model_name'),
     )
 
-    def insert_model(self, user_id, name, description, model_version):
-        new_model = Models(user_id=user_id, name=name, description=description, model_version=model_version)
-        db.session.add(new_model)
+    def __init__(self, user_id, name, description, model_version):
+        self.user_id = user_id
+        self.name = name
+        self.description = description
+        self.model_version = model_version
+
+    @classmethod
+    def insert_model(cls):  #, user_id, name, description, model_version
+        # new_model = cls(user_id=user_id, name=name, description=description, model_version=model_version)
+        db.session.add(cls)
         db.session.commit()
 
     def __repr__(self):
@@ -197,19 +208,22 @@ def generate_image():
                         "num_inference_steps": num_inference_steps
                     }
                 )
-                image_url = output[0]
+                output = list(output)  # Convert iterator to list
+                image_url = output[0] if output else None
                 
                 # Fetch the prediction details
-                prediction = replicate.predictions.list()[:1]
-                if prediction:
-                    predict_time = prediction[0].metrics.get('predict_time')
-                    total_time = prediction[0].metrics.get('total_time')
-                    show_guidance_scale = prediction[0].input['guidance_scale']
-                    show_num_inference_steps = prediction[0].input['num_inference_steps']
-                    show_lora_scale = prediction[0].input['lora_scale']
-                  
+                predictions = list(replicate.predictions.list())
+                if predictions:
+                    prediction = predictions[0]  # Get the most recent prediction
+                    predict_time = prediction.metrics.get('predict_time')
+                    total_time = prediction.metrics.get('total_time')
+                    show_guidance_scale = prediction.input.get('guidance_scale')
+                    show_num_inference_steps = prediction.input.get('num_inference_steps')
+                    show_lora_scale = prediction.input.get('lora_scale')
+                else:
+                    predict_time = total_time = show_guidance_scale = show_num_inference_steps = show_lora_scale = None
                 
-            except replicate.exceptions.ModelError as e:
+            except Exception as e:
                 if "NSFW" in str(e):
                     flash("NSFW content detected. Please try a different prompt.", "error")
                 else:
@@ -283,7 +297,7 @@ def upload_images():
         zip_buffer = io.BytesIO()
         with zipfile.ZipFile(zip_buffer, 'w') as zipf:
             for file in files:
-                if file and allowed_file(file.filename):
+                if file and file.filename and allowed_file(file.filename):
                     filename = secure_filename(file.filename)
                     zipf.writestr(filename, file.read())
         
@@ -342,11 +356,19 @@ def upload_images():
                     # if training succeeded Update the model version in the database and session
                     # Get the latest version of the model after training
                     model = replicate.models.get(new_model.id)
-                    latest_version = model.latest_version() # need to test this, not sure what hash is returned
-                    print("latest_version:", latest_version)
-                    new_db_model = Models(user_id=user_id, name=new_model.id, description=new_model.description, model_version=latest_version.id)
-                    db.session.add(new_db_model)
-                    db.session.commit()
+                    latest_version = model.latest_version
+                    if latest_version:
+                        print("latest_version:", latest_version)
+                        new_db_model = Models(user_id=user_id, name=new_model.id, description=new_model.description, model_version=latest_version.id)
+                        db.session.add(new_db_model)
+                        db.session.commit()
+                    else:
+                        print("No version available for the model")
+                        # Handle the case where no version is available
+                     # need to test this, not sure what hash is returned
+                    #print("latest_version:", latest_version)
+                    #new_db_model = Models(user_id=user_id, name=new_model.id, description=new_model.description, model_version=latest_version.id)
+                    
 
                     # Update the session data
                     new_model_data = {
@@ -355,7 +377,7 @@ def upload_images():
                         'description': new_db_model.description,
                         'created_at': new_db_model.created_at.isoformat() if new_db_model.created_at else None,
                         'updated_at': new_db_model.updated_at.isoformat() if new_db_model.updated_at else None,
-                        'model_version': latest_version.id
+                        'model_version': latest_version
                     }
                     
                     if 'models' not in session:
@@ -391,17 +413,16 @@ def upload_images():
 def training_status(training_id):
     try:
         training = replicate.trainings.get(training_id)
-        
+        elapsed_str = "00:00:00"
         # Calculate elapsed time
-        start_time = training.created_at
-        current_time = datetime.now(timezone.utc)
-        elapsed_time = current_time - start_time
-        
-        # Convert to hours, minutes, seconds
-        hours, remainder = divmod(int(elapsed_time.total_seconds()), 3600)
-        minutes, seconds = divmod(remainder, 60)
-        
-        elapsed_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        start_time = datetime.fromisoformat(training.created_at.replace('Z', '+00:00')) if training.created_at else None
+        if start_time:
+            current_time = datetime.now(timezone.utc)
+            elapsed_time = current_time - start_time
+            # Convert to hours, minutes, seconds
+            hours, remainder = divmod(int(elapsed_time.total_seconds()), 3600)
+            minutes, seconds = divmod(remainder, 60)
+            elapsed_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
         
         return jsonify({
             "status": training.status,
@@ -497,8 +518,9 @@ def signup():
             return redirect(url_for('signup'))
         
         # Check if username or email already exists
-        existing_user = Users.query.filter((Users.username == username) | (Users.email == email)).first()
-        if existing_user:
+        existing_username = Users.query.filter_by(username=username).first()
+        existing_email = Users.query.filter_by(email=email).first() 
+        if existing_username or existing_email:
             flash('Username or email already exists.', 'error')
             return redirect(url_for('signup'))
         
