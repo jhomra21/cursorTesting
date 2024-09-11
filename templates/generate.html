@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Generator</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            background-color: #e0e5e0;
+            color: #2c3e2c;
+            margin: 0;
+            padding: 2rem;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #d0d5d0;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        h1, h2 {
+            text-align: center;
+            color: #1a2b1a;
+        }
+        form {
+            display: flex;
+            flex-direction: column;
+        }
+        input, button, .slider {
+            padding: 0.5rem;
+            margin-top: 0.5rem;
+            border: 1px solid #4a5d4a;
+            border-radius: 4px;
+            background-color: #e8ede8;
+        }
+        button {
+            background-color: #4a5d4a;
+            color: #e0e5e0;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        button:hover {
+            background-color: #3a4d3a;
+        }
+        .message {
+            margin-top: 1rem;
+            padding: 0.5rem;
+            border-radius: 4px;
+            text-align: center;
+        }
+        .error { background-color: #8b4a4a; color: #e0e5e0; }
+        .success { background-color: #4a8b4a; color: #e0e5e0; }
+        .logout {
+            text-align: right;
+            margin-bottom: 1rem;
+        }
+        .logout a, .login a, .signup a {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            background-color: #4a5d4a;
+            color: #e0e5e0;
+            text-decoration: none;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+        }
+        .logout a:hover, .login a:hover, .signup a:hover {
+            background-color: #3a4d3a;
+        }
+        .login, .signup {
+            display: inline-block;
+            margin-left: 0.5rem;
+        }
+        img {
+            max-width: 100%;
+            border-radius: 8px;
+            margin-top: 1rem;
+        }
+        .recent-predictions {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 1rem;
+            margin-top: 2rem;
+        }
+        .prediction-item {
+            background-color: #e8ede8;
+            padding: 0.5rem;
+            border-radius: 4px;
+            text-align: center;
+        }
+        .prediction-item img {
+            width: 100%;
+            height: 100px;
+            object-fit: cover;
+            border-radius: 4px;
+        }
+        #loadingSpinner {
+            text-align: center;
+            margin-top: 1rem;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .generation-info {
+            background-color: #e8ede8;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-top: 1rem;
+            text-align: center;
+        }
+        .generation-info p {
+            margin: 0.5rem 0;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        {% if is_logged_in %}
+        <div class="logout">
+            <a href="{{ url_for('logout') }}" style="display: inline-block; padding: 0.5rem 1rem; background-color: #4a5d4a; color: #e0e5e0; text-decoration: none; border-radius: 4px; transition: background-color 0.3s;">Logout</a>
+        </div>
+        {% else %}
+        <div class="logout">
+            <span class="login"><a href="{{ url_for('login') }}" style="display: inline-block; padding: 0.5rem 1rem; background-color: #4a5d4a; color: #e0e5e0; text-decoration: none; border-radius: 4px; transition: background-color 0.3s;">Login</a></span>
+            <span class="signup"><a href="{{ url_for('signup') }}" style="display: inline-block; padding: 0.5rem 1rem; background-color: #4a5d4a; color: #e0e5e0; text-decoration: none; border-radius: 4px; transition: background-color 0.3s;">Sign Up</a></span>
+        </div>
+        {% endif %}
+
+        <h1>Image Generator</h1>
+        {% if models %}
+            <h3>Your Models:</h3>
+            <ul>
+            
+                <li>Name: {{models}}</li>
+           
+            </ul>
+        {% endif %}
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="message {{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+        <p>Welcome, {{ username }}!</p>
+        {% if image_url %}
+            <h2>Generated Image</h2>
+            <img src="{{ image_url }}" alt="Generated Image">
+            <p class="message">"{{ prompt }}"</p>
+            {% if predict_time and total_time %}
+                <div class="generation-info">
+                    <p>Predict Time: {{ predict_time|round(2) }} seconds</p>
+                    <p>Total Time: {{ total_time|round(2) }} seconds</p>
+                    <p>LoRA Scale: {{ lora_scale }}</p>
+                    <p>Guidance Scale: {{ guidance_scale }}</p>
+                    <p>Inference Steps: {{ num_inference_steps }}</p>
+                </div>
+            {% endif %}
+            
+            <div style="text-align: center; margin-top: 1rem;">
+                <a href="/generate" class="logout" style="display: inline-block; padding: 0.5rem 1rem; background-color: #4a5d4a; color: #e0e5e0; text-decoration: none; border-radius: 4px; transition: background-color 0.3s;">Generate another image</a>
+            </div>
+        {% else %}
+            <form method="post" id="generateForm">
+                <input type="text" name="prompt" placeholder="{{ trigger_word }} in a beautiful garden" required>
+                <p style="font-style: italic; margin-top: 0.5rem;">Tip: Use "{{ trigger_word }}" to place the subject in the image</p>
+                
+                <label for="num_inference_steps">Inference Steps: <span id="num_inference_steps_value">24</span></label>
+                <input type="range" id="num_inference_steps" name="num_inference_steps" min="1" max="50" value="24" class="slider">
+                
+                <label for="guidance_scale">Guidance Scale: <span id="guidance_scale_value">3.5</span></label>
+                <input type="range" id="guidance_scale" name="guidance_scale" min="0" max="10" step="0.1" value="3.5" class="slider">
+                
+                <label for="lora_scale">LoRA Scale: <span id="lora_scale_value">0.8</span></label>
+                <input type="range" id="lora_scale" name="lora_scale" min="-1" max="2" step="0.01" value="0.8" class="slider">
+                
+                <div style="text-align: center; margin-top: 1rem;">
+                    <p>Model: <strong>{{ model_name }}</strong></p>
+                    <p>LoRA: <strong>{{ lora_name }}</strong></p>
+                    <button type="submit" id="generateButton" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition duration-150 ease-in-out">
+                        Generate Image
+                    </button>
+                </div>
+            </form>
+            <div id="loadingSpinner" class="hidden mt-4">
+                <div class="spinner"></div>
+                <p class="text-sm text-gray-500 mt-2">Generating image...</p>
+            </div>
+        {% endif %}
+
+        {% if recent_predictions %}
+            <h2>Recent Predictions</h2>
+            <div class="recent-predictions">
+                {% for prediction in recent_predictions %}
+                    <div class="prediction-item">
+                        {% if prediction.url %}
+                            <img src="{{ prediction.url }}" alt="Generated Image">
+                        {% else %}
+                            <div style="height: 100px; background-color: #4a5d4a; display: flex; align-items: center; justify-content: center; color: #e0e5e0;">No image</div>
+                        {% endif %}
+                        <p style="font-style: italic; font-size: 0.8rem; margin: 0.5rem 0;">"{{ prediction.prompt }}"</p>
+                        <p style="font-size: 0.8rem; margin: 0;">{{ prediction.status }}</p>
+                        {% if prediction.url %}
+                            <a href="{{ prediction.url }}" target="_blank" style="font-size: 0.8rem; color: #4a5d4a;">Download</a>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        <div style="text-align: center; margin-top: 2rem;">
+            <a href="{{ url_for('upload_images') }}" style="color: #4a5d4a;">Upload Batch Images</a>
+        </div>
+    </div>
+
+    <script>
+        function updateSliderValue(sliderId) {
+            const slider = document.getElementById(sliderId);
+            const output = document.getElementById(sliderId + '_value');
+            output.innerHTML = slider.value;
+            slider.oninput = function() {
+                output.innerHTML = this.value;
+            }
+        }
+
+        updateSliderValue('num_inference_steps');
+        updateSliderValue('guidance_scale');
+        updateSliderValue('lora_scale');
+
+        document.addEventListener('DOMContentLoaded', function() {
+            const form = document.getElementById('generateForm');
+            const button = document.getElementById('generateButton');
+            const spinner = document.getElementById('loadingSpinner');
+
+            function disableButton() {
+                button.disabled = true;
+                button.style.opacity = '0.5';
+                button.style.cursor = 'not-allowed';
+            }
+
+            function enableButton() {
+                button.disabled = false;
+                button.style.opacity = '1';
+                button.style.cursor = 'pointer';
+            }
+
+            // Initially hide the spinner and enable the button
+            spinner.style.display = 'none';
+            enableButton();
+
+            form.addEventListener('submit', function(e) {
+                e.preventDefault();
+                disableButton();
+                spinner.style.display = 'block';
+
+                fetch(form.action, {
+                    method: form.method,
+                    body: new FormData(form)
+                }).then(response => {
+                    return response.text();
+                }).then(html => {
+                    document.body.innerHTML = html;
+                    window.scrollTo(0, 0);
+                }).catch(error => {
+                    console.error('Error:', error);
+                    enableButton();
+                    spinner.style.display = 'none';
+                });
+            });
+        });
+    </script>
+</body>
+</html>

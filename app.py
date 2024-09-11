@@ -11,6 +11,8 @@ from flask_sqlalchemy import SQLAlchemy
 from dotenv import load_dotenv
 from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
+from datetime import datetime
+from sqlalchemy.sql import func
 
 load_dotenv()
 # print("Environment variables:")
@@ -46,7 +48,7 @@ ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 
 #TODO:   will be changed later and loaded from usr table in the database
 TRIGGER_WORD = "ramon"
-NEW_MODEL_NAME="jhonra121/ramon-lora-20240910-154729"
+NEW_MODEL_NAME = "jhonra121/ramon-lora-20240910-154729:dd117084cca97542e09f6a2a458295054b4afb0b97417db068c20ff573997fc9"
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
@@ -56,6 +58,59 @@ if not os.path.exists(UPLOAD_FOLDER):
 def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+# Define User model
+class Users(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(80), unique=True, nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password_hash = db.Column(db.String(128), nullable=False)  # Make sure this is not nullable
+
+    # Add this line to create the relationship
+    models = db.relationship('Models', back_populates='user', cascade='all, delete-orphan')
+
+    def set_password(self, password):
+        if not password:
+            raise ValueError("Password cannot be empty")
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        if not self.password_hash:
+            return False
+        return check_password_hash(self.password_hash, password)
+
+    def __repr__(self):
+        return f'<User {self.username}>'
+
+# Define Models model
+class Models(db.Model):
+    __tablename__ = 'models'
+
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
+    name = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text)
+    created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
+    updated_at = db.Column(db.DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    model_version = db.Column(db.String(100))
+
+    # Relationship
+    user = db.relationship('Users', back_populates='models')
+
+    # Unique constraint
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'name', name='unique_user_model_name'),
+    )
+
+    def insert_model(self, user_id, name, description, model_version):
+        new_model = Models(user_id=user_id, name=name, description=description, model_version=model_version)
+        db.session.add(new_model)
+        db.session.commit()
+
+    def __repr__(self):
+        return f'<Model {self.name}>'
+    
 
 # get most recent predictions using replicate api, then limit to 10
 def get_recent_predictions():
@@ -81,8 +136,14 @@ def login_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+
+#new route ("/")
+@app.route("/")
+def index():
+    return render_template("index.html")
+
 # main route
-@app.route("/", methods=["GET", "POST"])
+@app.route("/generate", methods=["GET", "POST"])
 @login_required
 def generate_image():
     image_url = None
@@ -99,8 +160,28 @@ def generate_image():
             num_inference_steps = int(request.form["num_inference_steps"])
             guidance_scale = float(request.form["guidance_scale"])
             lora_scale = float(request.form["lora_scale"])
-            model = replicate.models.get(NEW_MODEL_NAME)
-            version = model.versions.get("dd117084cca97542e09f6a2a458295054b4afb0b97417db068c20ff573997fc9")
+
+            # fallback replicate model incase user session is empty
+            replicate_model = replicate.models.get("jhonra121/ramon-lora-20240910-154729")
+            replicate_model_version = replicate_model.versions.get("dd117084cca97542e09f6a2a458295054b4afb0b97417db068c20ff573997fc9")
+            # print("replicate_model_version:", replicate_model_version)
+            models = session.get('models', [])
+            
+            # Use the first model in the list, or a default if the list is empty
+            if models:
+                model = models[0]
+                current_model = model['name']
+                current_model_version = model['model_version']
+                print("current_model_version:", current_model_version)
+                version = replicate.models.get(current_model).versions.get(current_model_version)
+                
+            else:
+                # Fallback to a default model if no user models are available
+                flash("You have no trained models in your account. Please create a new model.", "error")
+                return redirect(url_for('generate_image'))
+            
+            # debug print for version errors
+            
             try:
                 output = replicate.run(
                     version,
@@ -149,8 +230,12 @@ def generate_image():
     is_logged_in = 'user_id' in session
     user_id = session.get('user_id')
     username = session.get('username')
+    models = session.get('models', [])
+    
+    # Format models as "name:version"
+    formatted_models = [f"{model['name']}:{model['model_version']}" for model in models]
 
-    return render_template("index.html", 
+    return render_template("generate.html", 
                            image_url=image_url, 
                            prompt=prompt, 
                            recent_predictions=recent_predictions,
@@ -160,6 +245,7 @@ def generate_image():
                            is_logged_in=is_logged_in,
                            user_id=user_id,
                            username=username,
+                           models=formatted_models,
                            predict_time=predict_time,
                            total_time=total_time,
                            guidance_scale=show_guidance_scale,
@@ -175,7 +261,9 @@ def get_latest_trigger_word():
     return TRIGGER_WORD
 
 @app.route('/upload', methods=['GET', 'POST'])
+@login_required
 def upload_images():
+    user_id = session.get('user_id')
     if request.method == 'POST':
         if 'files[]' not in request.files:
             flash('No file part', 'error')
@@ -201,6 +289,7 @@ def upload_images():
         
         # Reset the buffer position to the beginning
         zip_buffer.seek(0)
+
         
         try:
             # Create a new model on Replicate
@@ -210,13 +299,11 @@ def upload_images():
                 visibility="private",
                 hardware="gpu-a100-large"
             )
-
+            
+           
             # Convert zip_buffer to base64 and create a data URI
             zip_base64 = base64.b64encode(zip_buffer.getvalue()).decode('utf-8')
             zip_uri = f"data:application/zip;base64,{zip_base64}"
-
-            # Create the hf_repo_id with the trigger word
-            hf_repo_id = f"jhomra21/{trigger_word}-LoRA"
 
             # Create the training using Replicate API
             training = replicate.trainings.create(
@@ -228,19 +315,71 @@ def upload_images():
                     "optimizer": "adamw8bit",
                     "batch_size": 1,
                     "resolution": "512,768,1024",
-                    "autocaption": True,
+                    "autocaption": False,
                     "input_images": zip_uri,
                     "trigger_word": trigger_word,
-                    # "hf_repo_id": hf_repo_id,  # Use the new hf_repo_id with trigger word
-                    # "hf_token": hf_token,
                     "learning_rate": 0.0004,
                 },
             )
             
             TRIGGER_WORD = trigger_word
             NEW_MODEL_NAME = new_model.name
-            flash(f'New model created and training started. Model: {new_model.name}, Training ID: {training.id}', 'success')
-            return jsonify({"status": "success", "training_id": training.id, "model_name": new_model.name})
+
+            # Add a while loop to check training status
+            import time
+            max_attempts = 60  # Adjust this value based on expected training time
+            attempt = 0
+            while attempt < max_attempts:
+                training = replicate.trainings.get(training.id)
+                if training.status == 'failed':
+                    # Training completed failed
+                    flash(f'Training failed for model: {new_model.name}', 'error')
+                    # TODO: add model to db with updated training id/version; also update model id and version so the user can go generate
+                    break
+                elif training.status == 'succeeded':
+                    # Training succeeded
+                    flash(f'Training finished successfully! Model: {new_model.name}', 'success')
+                    # if training succeeded Update the model version in the database and session
+                    # Get the latest version of the model after training
+                    model = replicate.models.get(new_model.id)
+                    latest_version = model.latest_version() # need to test this, not sure what hash is returned
+                    print("latest_version:", latest_version)
+                    new_db_model = Models(user_id=user_id, name=new_model.id, description=new_model.description, model_version=latest_version.id)
+                    db.session.add(new_db_model)
+                    db.session.commit()
+
+                    # Update the session data
+                    new_model_data = {
+                        'id': new_db_model.id,
+                        'name': new_db_model.name,
+                        'description': new_db_model.description,
+                        'created_at': new_db_model.created_at.isoformat() if new_db_model.created_at else None,
+                        'updated_at': new_db_model.updated_at.isoformat() if new_db_model.updated_at else None,
+                        'model_version': latest_version.id
+                    }
+                    
+                    if 'models' not in session:
+                        session['models'] = []
+                    session['models'].append(new_model_data)
+                    session.modified = True
+                    break
+                elif training.status == 'canceled':
+                    # Training canceled
+                    flash(f'Training canceled for model: {new_model.name}', 'error')
+                    break
+                else:
+                    # Training still in progress
+                    print(f"Training status: {training.status}")
+                    print(f"Training logs: {training.logs}")
+                    time.sleep(60)  # Wait for 60 seconds before checking again
+                    attempt += 1
+
+            if attempt == max_attempts:
+                flash(f'Training status check timed out for model: {new_model.name}', 'warning')
+
+            
+
+            return redirect(url_for('generate_image'))
         except Exception as e:
             flash(f'Error creating model or starting training: {str(e)}', 'error')
             return jsonify({"status": "error", "message": str(e)})
@@ -273,26 +412,6 @@ def training_status(training_id):
         return jsonify({"error": str(e)}), 400
 
 
-# Define User model
-class Users(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=False)
-    password_hash = db.Column(db.String(128), nullable=False)  # Make sure this is not nullable
-
-    def set_password(self, password):
-        if not password:
-            raise ValueError("Password cannot be empty")
-        self.password_hash = generate_password_hash(password)
-
-    def check_password(self, password):
-        if not self.password_hash:
-            return False
-        return check_password_hash(self.password_hash, password)
-
-    def __repr__(self):
-        return f'<User {self.username}>'
-
 
 
 @app.route('/allusers')
@@ -310,11 +429,28 @@ def login():
         password = request.form['password']
         user = Users.query.filter_by(username=username).first()
         if user and user.password_hash and user.check_password(password):
+            models = Models.query.filter_by(user_id=user.id).all()
+            # Serialize models data
+            serialized_models = [
+                {
+                    'id': model.id,
+                    'name': model.name,
+                    'description': model.description,
+                    'created_at': model.created_at.isoformat() if model.created_at else None,
+                    'updated_at': model.updated_at.isoformat() if model.updated_at else None,
+                    'model_version': model.model_version
+                } for model in models
+            ]
             session['user_id'] = user.id
             session['username'] = user.username
+            session['models'] = serialized_models
             flash('Logged in successfully.', 'success')
             print(f"User logged in: {user.id}")  # Debug print
             print(f"User logged in: {user.username}")  # Debug print
+            if not serialized_models:
+                flash("Time to train a model!", "info")
+                return redirect(url_for('upload_images'))
+            flash("Model(s) found!", "info")
             return redirect(url_for('generate_image'))
         else:
             flash('Invalid username or password.', 'error')
