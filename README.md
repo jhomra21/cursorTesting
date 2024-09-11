@@ -30,6 +30,7 @@ Setup
 -Notes:
 
   Keep your Replicate API token confidential and do not share it publicly.
+  
   The application uses Tailwind CSS for styling. Make sure to set it up correctly.
   If you encounter any issues, ensure all files are in the correct locations and that the Replicate API token is set   
   correctly in the .env file.
