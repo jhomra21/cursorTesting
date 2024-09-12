@@ -189,7 +189,7 @@ def generate_image():
             else:
                 # Fallback to a default model if no user models are available
                 flash("You have no trained models in your account. Please create a new model.", "error")
-                return redirect(url_for('generate_image'))
+                return redirect(url_for('upload_images'))
             
             # debug print for version errors
             
@@ -230,6 +230,11 @@ def generate_image():
                     flash(f"An error occurred: {str(e)}", "error")
                 return redirect(url_for('generate_image'))
     
+    #if session['models'] is empty, redirect to upload_images
+    if not session['models']:
+        flash("You have no trained models in your account. Please create a new model.", "info")
+        return redirect(url_for('upload_images'))
+
     # Get the latest trigger word (you'll need to implement this function)
     trigger_word = get_latest_trigger_word()
 
@@ -452,23 +457,28 @@ def login():
         if user and user.password_hash and user.check_password(password):
             models = Models.query.filter_by(user_id=user.id).all()
             # Serialize models data
-            serialized_models = [
-                {
+            if models:
+                serialized_models = [
+                    {
                     'id': model.id,
                     'name': model.name,
                     'description': model.description,
                     'created_at': model.created_at.isoformat() if model.created_at else None,
                     'updated_at': model.updated_at.isoformat() if model.updated_at else None,
                     'model_version': model.model_version
-                } for model in models
-            ]
+                    } for model in models
+                ]
+                session['models'] = serialized_models
+            else:
+                session['models'] = []
+         
             session['user_id'] = user.id
             session['username'] = user.username
-            session['models'] = serialized_models
+            
             flash('Logged in successfully.', 'success')
             print(f"User logged in: {user.id}")  # Debug print
             print(f"User logged in: {user.username}")  # Debug print
-            if not serialized_models:
+            if not session['models']:
                 flash("Time to train a model!", "info")
                 return redirect(url_for('upload_images'))
             flash("Model(s) found!", "info")
