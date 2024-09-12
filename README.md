@@ -27,9 +27,10 @@ This is a Flask application that generates images using the Replicate API. It ap
   Follow the instructions in this guide: https://flowbite.com/docs/getting-started/flask/
   
 ### Running the Application
-  Ensure you're in the project directory and your virtual environment is activated.
-  Run the Flask application:
-    python app.py
+  * Ensure you're in the project directory and your virtual environment is activated.
+  * Run the Flask application:
+      python app.py
+  * Make sure to start up docker
     
 ## Notes
 
