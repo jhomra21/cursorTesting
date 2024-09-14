@@ -4,77 +4,87 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Batch Image Upload</title>
-    <link rel="stylesheet" href="{{url_for('static',filename='dist/css/output.css')}}">
+    <link rel="stylesheet" href="{{url_for('static',filename='css/styles.css')}}">
 </head>
 <body class="bg-gray-100 min-h-screen flex items-center justify-center">
-    <div class="bg-white p-8 rounded-lg shadow-md w-full max-w-4xl relative">
+    <div class="container">
         {% if session.get('user_id') %}
-            <a href="{{ url_for('logout') }}" class="absolute top-2 right-2 bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 transition duration-300 ease-in-out" style="float: right;">Logout</a>
+            <div class="logout">
+                <a class="logout-button" href="{{ url_for('logout') }}" class="logout-button">Logout</a>
+            </div>
         {% endif %}
         
-        <h1 class="text-3xl font-bold mb-6 text-center">Batch Image Upload</h1>
+        <h1>Batch Image Upload</h1>
         
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
-                    <div class="mb-4 p-4 rounded-md {% if category == 'error' %}bg-red-100 text-red-700{% else %}bg-green-100 text-green-700{% endif %}">
-                        {{ message }}
-                    </div>
+                    <div class="message {{ category }}">{{ message }}</div>
                 {% endfor %}
             {% endif %}
         {% endwith %}
 
-        <form id="uploadForm" method="post" enctype="multipart/form-data" class="space-y-4 mb-8">
-            <div class="space-y-2">
-                <label for="files" class="block text-sm font-medium text-gray-700">Choose images to upload</label>
-                <input type="file" id="files" name="files[]" multiple accept=".png,.jpg,.jpeg" class="w-full px-3 py-2 border rounded-md">
+        <form id="uploadForm" method="post" enctype="multipart/form-data">
+            <div>
+                <label for="files">Choose images to upload</label>
+                <input type="file" id="files" name="files[]" multiple accept=".png,.jpg,.jpeg">
             </div>
-            <div class="space-y-2">
-                <label for="trigger_word" class="block text-sm font-medium text-gray-700">Trigger Word</label>
-                <input type="text" id="trigger_word" name="trigger_word" required class="w-full px-3 py-2 border rounded-md">
+            <div>
+                <label for="trigger_word">Trigger Word</label>
+                <input type="text" id="trigger_word" name="trigger_word" required>
             </div>
-            <div class="text-center">
-                <button type="submit" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Upload and Start Training</button>
+            <div>
+                <label for="steps">Training Steps</label>
+                <input type="number" id="steps" name="steps" value="800" min="200" max="2000" required>
+            </div>
+            <div>
+                <button type="submit" class="generate-button">Upload and Start Training</button>
             </div>
         </form>
         
         <div id="loadingState" class="hidden">
-            <div class="text-center mb-4">
-                <p class="text-lg font-semibold">Training in progress...</p>
-                <p id="progressText" class="text-sm text-gray-600"></p>
+            <div>
+               
+                <p id="progressText"></p>
+                <span id="training-logs"></span>
             </div>
-            <div class="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700">
-                <div id="progressBar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
+            <div class="progress-bar">
+                <div id="progressBar" style="width: 0%"></div>
             </div>
         </div>
         
-        <div class="text-center mt-4">
-            <a href="/generate" class="text-blue-500 hover:underline">Back to Image Generator</a>
+        <div>
+            <a href="/generate" class="back-link">Back to Image Generator</a>
         </div>
     </div>
 
     <script>
         document.getElementById('uploadForm').addEventListener('submit', function(e) {
             e.preventDefault();
-            const formData = new FormData(this);
             
-            fetch('/upload', {
+            const form = this;
+            const formData = new FormData(form);
+            
+            // Show loading state
+            document.getElementById('loadingState').classList.remove('hidden');
+            
+            fetch(form.action, {
                 method: 'POST',
                 body: formData
             })
             .then(response => response.json())
             .then(data => {
-                if (data.status === 'success') {
-                    document.getElementById('loadingState').classList.remove('hidden');
-                    document.getElementById('progressText').textContent = `New model created: ${data.model_name}`;
+                if (data.status === 'success' || data.status === 'queued' || data.status === 'starting' || data.status === 'running' && data.training_id) {
                     checkTrainingStatus(data.training_id);
                 } else {
-                    alert('Error: ' + data.message);
+                    document.getElementById('progressText').textContent =  (data.message + ' ' + data.statu|| 'Unknown');
+                    document.getElementById('loadingState').classList.add('hidden');
                 }
             })
             .catch(error => {
                 console.error('Error:', error);
-                alert('An error occurred while uploading.');
+                document.getElementById('progressText').textContent = 'Error submitting form.';
+                document.getElementById('loadingState').classList.add('hidden');
             });
         });
 
@@ -83,23 +93,31 @@
             .then(response => response.json())
             .then(data => {
                 const progressText = document.getElementById('progressText');
-                
+                const trainingLogs = document.getElementById('training-logs');
                 if (data.error) {
                     progressText.textContent = 'Error: ' + data.error;
+                    document.getElementById('loadingState').classList.add('hidden');
                     return;
                 }
                 
                 progressText.textContent = `Status: ${data.status} | Elapsed Time: ${data.elapsed_time}`;
+                trainingLogs.textContent = data.logs;
                 
-                if (!data.completed) {
-                    setTimeout(() => checkTrainingStatus(trainingId), 5000); // Check every 5 seconds
+                if (data.status === 'succeeded') {
+                    progressText.textContent = 'Training completed successfully!';
+                    document.getElementById('loadingState').classList.add('hidden');
+                } else if (data.status === 'failed' || data.status === 'canceled') {
+                    progressText.textContent = `Training ${data.status}.`;
+                    document.getElementById('loadingState').classList.add('hidden');
                 } else {
-                    progressText.textContent = 'Training completed!';
+                    // Continue checking status for in-progress training
+                    setTimeout(() => checkTrainingStatus(trainingId), 10000); // Check every 10 seconds
                 }
             })
             .catch(error => {
                 console.error('Error:', error);
                 document.getElementById('progressText').textContent = 'Error checking training status.';
+                document.getElementById('loadingState').classList.add('hidden');
             });
         }
     </script>

@@ -3,151 +3,34 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
     <title>Image Generator</title>
-    <style>
-        body {
-            font-family: 'Courier New', monospace;
-            background-color: #e0e5e0;
-            color: #2c3e2c;
-            margin: 0;
-            padding: 2rem;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background-color: #d0d5d0;
-            padding: 2rem;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-        }
-        h1, h2 {
-            text-align: center;
-            color: #1a2b1a;
-        }
-        form {
-            display: flex;
-            flex-direction: column;
-        }
-        input, button, .slider {
-            padding: 0.5rem;
-            margin-top: 0.5rem;
-            border: 1px solid #4a5d4a;
-            border-radius: 4px;
-            background-color: #e8ede8;
-        }
-        button {
-            background-color: #4a5d4a;
-            color: #e0e5e0;
-            border: none;
-            cursor: pointer;
-            transition: background-color 0.3s;
-        }
-        button:hover {
-            background-color: #3a4d3a;
-        }
-        .message {
-            margin-top: 1rem;
-            padding: 0.5rem;
-            border-radius: 4px;
-            text-align: center;
-        }
-        .error { background-color: #8b4a4a; color: #e0e5e0; }
-        .success { background-color: #4a8b4a; color: #e0e5e0; }
-        .logout {
-            text-align: right;
-            margin-bottom: 1rem;
-        }
-        .logout a, .login a, .signup a {
-            display: inline-block;
-            padding: 0.5rem 1rem;
-            background-color: #4a5d4a;
-            color: #e0e5e0;
-            text-decoration: none;
-            border-radius: 4px;
-            transition: background-color 0.3s;
-        }
-        .logout a:hover, .login a:hover, .signup a:hover {
-            background-color: #3a4d3a;
-        }
-        .login, .signup {
-            display: inline-block;
-            margin-left: 0.5rem;
-        }
-        img {
-            max-width: 100%;
-            border-radius: 8px;
-            margin-top: 1rem;
-        }
-        .recent-predictions {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-            gap: 1rem;
-            margin-top: 2rem;
-        }
-        .prediction-item {
-            background-color: #e8ede8;
-            padding: 0.5rem;
-            border-radius: 4px;
-            text-align: center;
-        }
-        .prediction-item img {
-            width: 100%;
-            height: 100px;
-            object-fit: cover;
-            border-radius: 4px;
-        }
-        #loadingSpinner {
-            text-align: center;
-            margin-top: 1rem;
-        }
-        .spinner {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #3498db;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-        .generation-info {
-            background-color: #e8ede8;
-            padding: 1rem;
-            border-radius: 4px;
-            margin-top: 1rem;
-            text-align: center;
-        }
-        .generation-info p {
-            margin: 0.5rem 0;
-            font-size: 0.9rem;
-        }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}">
 </head>
 <body>
     <div class="container">
         {% if is_logged_in %}
         <div class="logout">
-            <a href="{{ url_for('logout') }}" style="display: inline-block; padding: 0.5rem 1rem; background-color: #4a5d4a; color: #e0e5e0; text-decoration: none; border-radius: 4px; transition: background-color 0.3s;">Logout</a>
+            <a class="logout-button" href="{{ url_for('logout') }}">Logout</a>
         </div>
         {% else %}
         <div class="logout">
-            <span class="login"><a href="{{ url_for('login') }}" style="display: inline-block; padding: 0.5rem 1rem; background-color: #4a5d4a; color: #e0e5e0; text-decoration: none; border-radius: 4px; transition: background-color 0.3s;">Login</a></span>
-            <span class="signup"><a href="{{ url_for('signup') }}" style="display: inline-block; padding: 0.5rem 1rem; background-color: #4a5d4a; color: #e0e5e0; text-decoration: none; border-radius: 4px; transition: background-color 0.3s;">Sign Up</a></span>
+            <span class="login"><a href="{{ url_for('login') }}" style="display: inline-block; padding: 0.5rem 1rem; background-color: transparent; color: #ffffff; text-decoration: none; border-radius: 4px; border: 2px solid #ffffff; transition: background-color 0.3s;">Login</a></span>
+            <span class="signup"><a href="{{ url_for('signup') }}" style="display: inline-block; padding: 0.5rem 1rem; background-color: transparent; color: #ffffff; text-decoration: none; border-radius: 4px; border: 2px solid #ffffff; transition: background-color 0.3s;">Sign Up</a></span>
         </div>
         {% endif %}
 
-        <h1>Image Generator</h1>
-        {% if models %}
-            <h3>Your Models:</h3>
-            <ul>
-            
-                <li>Name: {{models}}</li>
-           
-            </ul>
-        {% endif %}
+        <h1 class="text-2xl font-bold">Image Generator</h1>
+        <div class="user-name">
+            <h2 style="float: left;">Welcome, <span class="font-bold">{{ username }}</span>!</h2>
+        </div>
+        <br>
+        <ul class="list-none p-0">
+            {% for model in models %}
+                <li class="break-words max-w-fit inline-block">Model: {{ model }}</li>
+            {% endfor %}
+        </ul>
+        
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
@@ -155,7 +38,7 @@
                 {% endfor %}
             {% endif %}
         {% endwith %}
-        <p>Welcome, {{ username }}!</p>
+        
         {% if image_url %}
             <h2>Generated Image</h2>
             <img src="{{ image_url }}" alt="Generated Image">
@@ -171,7 +54,7 @@
             {% endif %}
             
             <div style="text-align: center; margin-top: 1rem;">
-                <a href="/generate" class="logout" style="display: inline-block; padding: 0.5rem 1rem; background-color: #4a5d4a; color: #e0e5e0; text-decoration: none; border-radius: 4px; transition: background-color 0.3s;">Generate another image</a>
+                <a href="/generate" class="generate-button" style="display: inline-block; padding: 0.5rem 1rem; background-color: transparent; color: #ffffff; text-decoration: none; border-radius: 4px; border: 2px solid #ffffff; transition: background-color 0.3s;">Generate another image</a>
             </div>
         {% else %}
             <form method="post" id="generateForm">
@@ -188,9 +71,9 @@
                 <input type="range" id="lora_scale" name="lora_scale" min="-1" max="2" step="0.01" value="0.8" class="slider">
                 
                 <div style="text-align: center; margin-top: 1rem;">
-                    <p>Model: <strong>{{ model_name }}</strong></p>
+                    <p>Model: <strong>{{ models[-1] }}</strong></p>
                     <p>LoRA: <strong>{{ lora_name }}</strong></p>
-                    <button type="submit" id="generateButton" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition duration-150 ease-in-out">
+                    <button type="submit" id="generateButton" class="generate-button">
                         Generate Image
                     </button>
                 </div>
@@ -224,6 +107,11 @@
         <div style="text-align: center; margin-top: 2rem;">
             <a href="{{ url_for('upload_images') }}" style="color: #4a5d4a;">Upload Batch Images</a>
         </div>
+
+        <div style="text-align: center; margin-top: 1rem;">
+            <a href="{{ url_for('buy_sample') }}" style="color: #4a5d4a;">Buy Sample Product</a>
+        </div>
+
     </div>
 
     <script>
@@ -282,5 +170,6 @@
             });
         });
     </script>
+    <link rel="stylesheet" href="{{url_for('static',filename='dist/css/output.css')}}">
 </body>
 </html>

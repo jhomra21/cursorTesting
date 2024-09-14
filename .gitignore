@@ -130,6 +130,9 @@ ENV/
 env.bak/
 venv.bak/
 
+# Cursor rules
+.cursorrules
+
 # Spyder project settings
 .spyderproject
 .spyproject

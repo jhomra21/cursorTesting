@@ -13,6 +13,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from functools import wraps
 from datetime import datetime
 from sqlalchemy.sql import func
+import requests
 
 load_dotenv()
 # print("Environment variables:")
@@ -37,6 +38,11 @@ db = SQLAlchemy(app)
 replicate_api_token = os.getenv("REPLICATE_API_TOKEN")
 hf_token = os.getenv("HF_TOKEN")
 # os.environ["REPLICATE_API_TOKEN"] = replicate_api_token
+
+# lemon squeezy
+LEMON_SQUEEZY_API_KEY = os.getenv("LEMON_TEST_SQUEEZY_API_KEY")
+LEMON_SQUEEZY_STORE_ID = os.getenv("LEMON_SQUEEZY_STORE_ID")
+SAMPLE_PRODUCT_ID = os.getenv("SAMPLE_PRODUCT_ID")
 
 # Add these variables at the top of the file, after the imports
 CURRENT_MODEL = "Flux-Dev"
@@ -173,8 +179,8 @@ def generate_image():
             lora_scale = float(request.form["lora_scale"])
 
             # fallback replicate model incase user session is empty
-            replicate_model = replicate.models.get("jhonra121/ramon-lora-20240910-154729")
-            replicate_model_version = replicate_model.versions.get("dd117084cca97542e09f6a2a458295054b4afb0b97417db068c20ff573997fc9")
+            # replicate_model = replicate.models.get("jhonra121/ramon-lora-20240910-154729")
+            # replicate_model_version = replicate_model.versions.get("dd117084cca97542e09f6a2a458295054b4afb0b97417db068c20ff573997fc9")
             # print("replicate_model_version:", replicate_model_version)
             models = session.get('models', [])
             
@@ -313,7 +319,7 @@ def upload_images():
         try:
             # Create a new model on Replicate
             new_model = replicate.models.create(
-                owner="jhonra121",
+                owner="jhomragaming",
                 name=f"{trigger_word}-lora-" + datetime.now().strftime("%Y%m%d-%H%M%S"),
                 visibility="private",
                 hardware="gpu-a100-large"
@@ -326,7 +332,7 @@ def upload_images():
 
             # Create the training using Replicate API
             training = replicate.trainings.create(
-                destination=f"jhonra121/{new_model.name}",
+                destination=f"jhomragaming/{new_model.name}",
                 version="ostris/flux-dev-lora-trainer:d995297071a44dcb72244e6c19462111649ec86a9646c32df56daa7f14801944",
                 input={
                     "steps": 800,
@@ -438,8 +444,6 @@ def training_status(training_id):
         return jsonify({"error": str(e)}), 400
 
 
-
-
 @app.route('/allusers')
 @login_required
 def all_users():
@@ -494,19 +498,6 @@ def logout():
     print(f"User logged out: {user_id}")  # Debug print
     return redirect(url_for('login'))
 
-def add_sample_users():
-    sample_users = [
-        {'username': 'user1', 'email': 'user1@example.com', 'password': 'password1'},
-        {'username': 'user2', 'email': 'user2@example.com', 'password': 'password2'},
-        {'username': 'user3', 'email': 'user3@example.com', 'password': 'password3'},
-    ]
-    for user_data in sample_users:
-        existing_user = Users.query.filter_by(username=user_data['username']).first()
-        if not existing_user:
-            user = Users(username=user_data['username'], email=user_data['email'])
-            user.set_password(user_data['password'])
-            db.session.add(user)
-    db.session.commit()
 
 def fix_user_passwords():
     users_without_password = Users.query.filter_by(password_hash=None).all()
@@ -545,11 +536,101 @@ def signup():
     
     return render_template('signup.html')
 
+
+# lemon squeezy sample product
+def get_variant_id(product_id):
+    headers = {
+        'Accept': 'application/vnd.api+json',
+        'Authorization': f'Bearer {LEMON_SQUEEZY_API_KEY}'
+    }
+    try:
+        # First, fetch the product
+        product_response = requests.get(f'https://api.lemonsqueezy.com/v1/products/{product_id}', headers=headers)
+        product_data = product_response.json()
+        
+        if 'data' in product_data and 'relationships' in product_data['data']:
+            variants_url = product_data['data']['relationships']['variants']['links']['related']
+            
+            # Now, fetch the variants
+            variants_response = requests.get(variants_url, headers=headers)
+            variants_data = variants_response.json()
+            
+            if 'data' in variants_data and variants_data['data']:
+                # Return the ID of the first variant
+                return variants_data['data'][0]['id']
+        
+        print("No variants found for the product")
+    except Exception as e:
+        print(f"Error in get_variant_id: {str(e)}")
+    return None
+
+
+@app.route('/buy-sample')
+@login_required
+def buy_sample():
+    return render_template('buy_sample.html', 
+                           store_id=LEMON_SQUEEZY_STORE_ID, 
+                           product_id=SAMPLE_PRODUCT_ID)
+
+@app.route('/create-checkout', methods=['POST'])
+@login_required
+def create_checkout():
+    headers = {
+        'Accept': 'application/vnd.api+json',
+        'Content-Type': 'application/vnd.api+json',
+        'Authorization': f'Bearer {LEMON_SQUEEZY_API_KEY}'
+    }
+    
+    store_id = LEMON_SQUEEZY_STORE_ID
+    product_id = SAMPLE_PRODUCT_ID  # This should be the actual product ID
+    print(f"Store ID: {store_id}")
+    print(f"Product ID: {product_id}")
+
+    variant_id = get_variant_id(product_id)
+    print(f"Variant ID: {variant_id}")
+
+
+    if not store_id or not variant_id:
+        print(f"Store ID or Variant ID is missing")
+        return jsonify({'error': 'Store ID or Variant ID is missing'}), 400
+
+    payload = {
+    "data": {
+        "type": "checkouts",
+        "relationships": {
+            "store": {
+                "data": {
+                    "type": "stores",
+                    "id": str(store_id)
+                }
+            },
+            "variant": {
+                "data": {
+                    "type": "variants",
+                    "id": str(variant_id)
+                }
+            }
+        }
+    }
+}
+    
+    response = requests.post('https://api.lemonsqueezy.com/v1/checkouts', 
+                             json=payload, headers=headers)
+    print(f"Checkout Status Code: {response.status_code}")
+    print(f"Checkout Response: {response.text}")
+
+    if response.status_code == 201:
+        checkout_url = response.json()['data']['attributes']['url']
+        return jsonify({'checkout_url': checkout_url})
+    else:
+        print(f"Error response: {response.text}")
+        return jsonify({'error': 'Failed to create checkout'}), 400
+    
+
 if __name__ == "__main__":
     with app.app_context():
         db.create_all()
-        # fix_user_passwords()  
-        add_sample_users()
+      
     app.run(debug=True)
 
 # if you made it this far, thank you for checking out my code!
