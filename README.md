@@ -47,7 +47,7 @@ This is a Flask application that generates images using the Replicate API. It ap
     
 ## Notes
 
-  Keep your Replicate API token confidential and do not share it publicly. 🚫
+ 🚫🚫 Keep your Replicate API token confidential and do not share it publicly! 🚫🚫
   
   The application uses Tailwind CSS for styling. Make sure to set it up correctly.
   
