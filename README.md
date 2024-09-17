@@ -1,4 +1,4 @@
-# 👾 Image Generator with Replicate API 🤖
+# 👾 Train Custom LoRA's and Generate Images with Replicate API 🤖
 
 This is a Flask application that generates images using the Replicate API. It applies a custom LoRA (Low-Rank Adaptation) model trained on specific images to create unique outputs.
 
