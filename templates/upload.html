@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Batch Image Upload</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.7.7/axios.min.js" integrity="sha512-DdX/YwF5e41Ok+AI81HI8f5/5UsoxCVT9GKYZRIzpLxb8Twz4ZwPPX+jQMwMhNQ9b5+zDEefc+dcvQoPWGNZ3g==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
     <link rel="stylesheet" href="{{url_for('static',filename='css/styles.css')}}">
 </head>
 <body class="bg-gray-100 min-h-screen flex items-center justify-center">
@@ -43,83 +44,107 @@
         </form>
         
         <div id="loadingState" class="hidden">
-            <div>
-               
-                <p id="progressText"></p>
-                <span id="training-logs"></span>
-            </div>
-            <div class="progress-bar">
-                <div id="progressBar" style="width: 0%"></div>
-            </div>
+            <p id="progressText"></p>
+            <div id="training-logs"></div>
+            <button id="cancelButton" class="cancel-button hidden">Cancel Training</button>
         </div>
         
         <div>
             <a href="/generate" class="back-link">Back to Image Generator</a>
         </div>
+        
+        <div>
+            <a href="/test-redis" target="_blank">Test Redis Connection</a>
+        </div>
     </div>
 
     <script>
+        let statusCheckInterval;
+        let cancelUrl;
+
+        function checkTrainingStatus(trainingId) {
+            fetch(`/training_status/${trainingId}`)
+                .then(response => response.json())
+                .then(data => {
+                    console.log(data);
+                    updateUI(data);
+                    
+                    if (data.cancel_url) {
+                        cancelUrl = data.cancel_url;
+                        document.getElementById('cancelButton').classList.remove('hidden');
+                    } else {
+                        document.getElementById('cancelButton').classList.add('hidden');
+                    }
+                    
+                    if (data.status === 'succeeded' || data.status === 'failed' || data.status === 'canceled') {
+                        clearInterval(statusCheckInterval);
+                        document.getElementById('uploadForm').style.display = 'block';
+                        document.getElementById('loadingState').classList.add('hidden');
+                        if (data.status === 'succeeded') {
+                            window.location.href = '/generate';
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error checking training status:', error);
+                    updateUI({ status: 'Error checking training status. Please try again.' });
+                });
+        }
+
+        function updateUI(data) {
+            document.getElementById('progressText').textContent = `Status: ${data.status}`;
+            document.getElementById('training-logs').textContent = `Elapsed Time: ${data.elapsed_time}`;
+        }
+
+        document.getElementById('cancelButton').addEventListener('click', function() {
+            if (cancelUrl) {
+                fetch(cancelUrl, { method: 'POST' })
+                    .then(response => response.json())
+                    .then(data => {
+                        console.log('Training canceled:', data);
+                        updateUI({ status: 'Canceling...' });
+                    })
+                    .catch(error => {
+                        console.error('Error canceling training:', error);
+                    });
+            }
+        });
+
         document.getElementById('uploadForm').addEventListener('submit', function(e) {
             e.preventDefault();
             
             const form = this;
             const formData = new FormData(form);
             
-            // Show loading state
             document.getElementById('loadingState').classList.remove('hidden');
+            form.style.display = 'none';
             
             fetch(form.action, {
                 method: 'POST',
                 body: formData
             })
-            .then(response => response.json())
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
             .then(data => {
-                if (data.status === 'success' || data.status === 'queued' || data.status === 'starting' || data.status === 'running' && data.training_id) {
-                    checkTrainingStatus(data.training_id);
+                console.log(data);
+                if (data.status !== 'canceled' || data.status !== 'failed') {
+                    statusCheckInterval = setInterval(() => checkTrainingStatus(data.id), 20000);
+                    checkTrainingStatus(data.id);
                 } else {
-                    document.getElementById('progressText').textContent =  (data.message + ' ' + data.statu|| 'Unknown');
-                    document.getElementById('loadingState').classList.add('hidden');
+                    throw new Error(data.message || 'Unexpected response from server');
                 }
             })
             .catch(error => {
                 console.error('Error:', error);
-                document.getElementById('progressText').textContent = 'Error submitting form.';
-                document.getElementById('loadingState').classList.add('hidden');
+                document.getElementById('progressText').textContent = `Error: ${error.message}`;
+                document.getElementById('loadingState').classList.remove('hidden');
+                form.style.display = 'block';
             });
         });
-
-        function checkTrainingStatus(trainingId) {
-            fetch(`/training_status/${trainingId}`)
-            .then(response => response.json())
-            .then(data => {
-                const progressText = document.getElementById('progressText');
-                const trainingLogs = document.getElementById('training-logs');
-                if (data.error) {
-                    progressText.textContent = 'Error: ' + data.error;
-                    document.getElementById('loadingState').classList.add('hidden');
-                    return;
-                }
-                
-                progressText.textContent = `Status: ${data.status} | Elapsed Time: ${data.elapsed_time}`;
-                trainingLogs.textContent = data.logs;
-                
-                if (data.status === 'succeeded') {
-                    progressText.textContent = 'Training completed successfully!';
-                    document.getElementById('loadingState').classList.add('hidden');
-                } else if (data.status === 'failed' || data.status === 'canceled') {
-                    progressText.textContent = `Training ${data.status}.`;
-                    document.getElementById('loadingState').classList.add('hidden');
-                } else {
-                    // Continue checking status for in-progress training
-                    setTimeout(() => checkTrainingStatus(trainingId), 10000); // Check every 10 seconds
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                document.getElementById('progressText').textContent = 'Error checking training status.';
-                document.getElementById('loadingState').classList.add('hidden');
-            });
-        }
     </script>
 </body>
 </html>

@@ -16,10 +16,6 @@ from sqlalchemy.sql import func
 import requests
 
 load_dotenv()
-# print("Environment variables:")
-# print(f"POSTGRES_DB: {os.getenv('POSTGRES_DB')}")
-# print(f"REPLICATE_API_TOKEN: {os.getenv('REPLICATE_API_TOKEN')}")
-# print(f"HF_TOKEN: {os.getenv('HF_TOKEN')}")
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # Set a secret key for flash messages
@@ -65,13 +61,12 @@ def allowed_file(filename):
     return '.' in filename and \
            filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-
 # Define User model
 class Users(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
-    password_hash = db.Column(db.String(128), nullable=False)  # Make sure this is not nullable
+    password_hash = db.Column(db.String(255), nullable=False)  # Make sure this is not nullable
 
     # Add this line to create the relationship
     models = db.relationship('Models', back_populates='user', cascade='all, delete-orphan')
@@ -104,6 +99,7 @@ class Models(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), server_default=func.now())
     updated_at = db.Column(db.DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     model_version = db.Column(db.String(100))
+    status = db.Column(db.String(50))
 
     # Relationship
     user = db.relationship('Users', back_populates='models')
@@ -113,11 +109,12 @@ class Models(db.Model):
         db.UniqueConstraint('user_id', 'name', name='unique_user_model_name'),
     )
 
-    def __init__(self, user_id, name, description, model_version):
+    def __init__(self, user_id, name, description, model_version, status):
         self.user_id = user_id
         self.name = name
         self.description = description
         self.model_version = model_version
+        self.status = status
 
     @classmethod
     def insert_model(cls):  #, user_id, name, description, model_version
@@ -127,7 +124,6 @@ class Models(db.Model):
 
     def __repr__(self):
         return f'<Model {self.name}>'
-    
 
 # get most recent predictions using replicate api, then limit to 10
 def get_recent_predictions():
@@ -152,7 +148,6 @@ def login_required(f):
             return redirect(url_for('login', next=request.url))
         return f(*args, **kwargs)
     return decorated_function
-
 
 #new route ("/")
 @app.route("/")
@@ -203,7 +198,7 @@ def generate_image():
                 output = replicate.run(
                     version,
                     input={
-                        "prompt": prompt,
+                        "prompt": f"{prompt}; professional photo and lens",
                         "model": "dev",
                         "lora_scale": lora_scale,
                         "num_outputs": 1,
@@ -285,6 +280,62 @@ def get_latest_trigger_word():
     # For now, we'll return a default value
     return TRIGGER_WORD
 
+@app.route('/training_status/<training_id>')
+def training_status(training_id):
+    try:
+        training = replicate.trainings.get(training_id)
+        if training is None:
+            return jsonify({"error": "Training not found"}), 404
+        elapsed_str = "00:00:00"
+        # Calculate elapsed time
+        start_time = datetime.fromisoformat(training.created_at.replace('Z', '+00:00')) if training.created_at else None
+        if start_time:
+            current_time = datetime.now(timezone.utc)
+            elapsed_time = current_time - start_time
+            # Convert to hours, minutes, seconds
+            hours, remainder = divmod(int(elapsed_time.total_seconds()), 3600)
+            minutes, seconds = divmod(remainder, 60)
+            elapsed_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        
+        if training.status == 'failed':
+            session.pop('trainings', None)
+            session.modified = True
+            flash(f'Training failed for model: {training.id}', 'error')
+            return jsonify({"training_id": training.id, "status": training.status, "elapsed_time": elapsed_str})
+        elif training.status == 'canceled':
+            session.pop('trainings', None)
+            session.modified = True
+            flash(f'Training canceled for model: {training.id}', 'warning')
+            return jsonify({"training_id": training.id, "status": training.status, "elapsed_time": elapsed_str})
+        
+        elif training.status == 'succeeded':
+            user_id = session.get('user_id')
+            new_model_id = session['trainings'][0]['model_id']
+            model = replicate.models.get(new_model_id)
+            latest_version = model.latest_version
+            if latest_version:
+                print("latest_version:", latest_version)
+                new_db_model = Models(user_id=user_id, name=new_model_id, description='', model_version=latest_version.id, status="succeeded")
+                db.session.add(new_db_model)
+                db.session.commit()
+            else:
+                print("No version available for the model")
+                # Handle the case where no version is available
+            session.pop('trainings', None)
+            session.modified = True
+            flash(f'Training finished successfully! Model: {training.id}', 'success')
+            return redirect(url_for('generate_image'))
+        else:
+            return jsonify({
+                "id": training.id,
+                "status": training.status,
+                "elapsed_time": elapsed_str,
+                "created_at": training.created_at or None,
+                "cancel_url": getattr(training.urls, 'cancel', None) if training.status in ['starting', 'processing'] else None
+            })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
 @app.route('/upload', methods=['GET', 'POST'])
 @login_required
 def upload_images():
@@ -319,20 +370,19 @@ def upload_images():
         try:
             # Create a new model on Replicate
             new_model = replicate.models.create(
-                owner="jhomragaming",
+                owner="juanmartbulnes",
                 name=f"{trigger_word}-lora-" + datetime.now().strftime("%Y%m%d-%H%M%S"),
                 visibility="private",
                 hardware="gpu-a100-large"
             )
-            
-           
+
             # Convert zip_buffer to base64 and create a data URI
             zip_base64 = base64.b64encode(zip_buffer.getvalue()).decode('utf-8')
             zip_uri = f"data:application/zip;base64,{zip_base64}"
 
             # Create the training using Replicate API
             training = replicate.trainings.create(
-                destination=f"jhomragaming/{new_model.name}",
+                destination=f"juanmartbulnes/{new_model.name}",
                 version="ostris/flux-dev-lora-trainer:d995297071a44dcb72244e6c19462111649ec86a9646c32df56daa7f14801944",
                 input={
                     "steps": 800,
@@ -346,6 +396,25 @@ def upload_images():
                     "learning_rate": 0.0004,
                 },
             )
+            # add training to session
+            if 'trainings' not in session:
+                session['trainings'] = []
+            session['trainings'].append({
+                'id': training.id,
+                'status': training.status,
+                'logs': training.logs,
+                'model_id': new_model.id,
+                'model_name': new_model.name,
+               
+            })
+
+            session.modified = True
+            #return json with training info and add to session
+            return jsonify({
+                "id": training.id,
+                "status": training.status,
+                "logs": training.logs
+            }), 200
             
             TRIGGER_WORD = trigger_word
             NEW_MODEL_NAME = new_model.name
@@ -370,7 +439,7 @@ def upload_images():
                     latest_version = model.latest_version
                     if latest_version:
                         print("latest_version:", latest_version)
-                        new_db_model = Models(user_id=user_id, name=new_model.id, description=new_model.description, model_version=latest_version.id)
+                        new_db_model = Models(user_id=user_id, name=new_model.id, description=new_model.description, model_version=latest_version.id, status="succeeded")
                         db.session.add(new_db_model)
                         db.session.commit()
                     else:
@@ -420,28 +489,7 @@ def upload_images():
     return render_template('upload.html')
 
 
-@app.route('/training_status/<training_id>')
-def training_status(training_id):
-    try:
-        training = replicate.trainings.get(training_id)
-        elapsed_str = "00:00:00"
-        # Calculate elapsed time
-        start_time = datetime.fromisoformat(training.created_at.replace('Z', '+00:00')) if training.created_at else None
-        if start_time:
-            current_time = datetime.now(timezone.utc)
-            elapsed_time = current_time - start_time
-            # Convert to hours, minutes, seconds
-            hours, remainder = divmod(int(elapsed_time.total_seconds()), 3600)
-            minutes, seconds = divmod(remainder, 60)
-            elapsed_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
-        
-        return jsonify({
-            "status": training.status,
-            "elapsed_time": elapsed_str,
-            "completed": training.completed_at is not None
-        })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 400
+
 
 
 @app.route('/allusers')
@@ -480,8 +528,8 @@ def login():
             session['username'] = user.username
             
             flash('Logged in successfully.', 'success')
-            print(f"User logged in: {user.id}")  # Debug print
-            print(f"User logged in: {user.username}")  # Debug print
+            print(f"User logged in: {user.id}")
+            print(f"User logged in: {user.username}")
             if not session['models']:
                 flash("Time to train a model!", "info")
                 return redirect(url_for('upload_images'))
@@ -495,14 +543,13 @@ def login():
 def logout():
     user_id = session.pop('user_id', None)
     flash('You have been logged out.', 'success')
-    print(f"User logged out: {user_id}")  # Debug print
+    print(f"User logged out: {user_id}")
     return redirect(url_for('login'))
-
 
 def fix_user_passwords():
     users_without_password = Users.query.filter_by(password_hash=None).all()
     for user in users_without_password:
-        user.set_password('default_password')  # Set a default password
+        user.set_password('default_password')
     db.session.commit()
     print(f"Fixed {len(users_without_password)} users with default passwords.")
 
@@ -513,14 +560,12 @@ def signup():
         email = request.form['email']
         password = request.form['password']
         
-        # Check password length
         if len(password) < 8:
             flash('Password must be at least 8 characters long.', 'error')
             return redirect(url_for('signup'))
         
-        # Check if username or email already exists
         existing_username = Users.query.filter_by(username=username).first()
-        existing_email = Users.query.filter_by(email=email).first() 
+        existing_email = Users.query.filter_by(email=email).first()
         if existing_username or existing_email:
             flash('Username or email already exists.', 'error')
             return redirect(url_for('signup'))
@@ -536,7 +581,6 @@ def signup():
     
     return render_template('signup.html')
 
-
 # lemon squeezy sample product
 def get_variant_id(product_id):
     headers = {
@@ -544,7 +588,6 @@ def get_variant_id(product_id):
         'Authorization': f'Bearer {LEMON_SQUEEZY_API_KEY}'
     }
     try:
-        # First, fetch the product
         product_response = requests.get(f'https://api.lemonsqueezy.com/v1/products/{product_id}', headers=headers)
         product_data = product_response.json()
         
@@ -563,7 +606,6 @@ def get_variant_id(product_id):
     except Exception as e:
         print(f"Error in get_variant_id: {str(e)}")
     return None
-
 
 @app.route('/buy-sample')
 @login_required
@@ -588,7 +630,6 @@ def create_checkout():
 
     variant_id = get_variant_id(product_id)
     print(f"Variant ID: {variant_id}")
-
 
     if not store_id or not variant_id:
         print(f"Store ID or Variant ID is missing")
