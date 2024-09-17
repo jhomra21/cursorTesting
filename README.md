@@ -21,7 +21,7 @@ This is a Flask application that generates images using the Replicate API. It ap
 - hypercorn
 
 ## Setup
--Clone this repository or download the source code.
+- Clone this repository or download the source code.
 
 ### Create a virtual environment (optional but recommended):
   - python -m venv venv
