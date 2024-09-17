@@ -1,19 +1,19 @@
-# Image Generator with Replicate API :robot:
+# Image Generator with Replicate API 🤖
 
 This is a Flask application that generates images using the Replicate API. It applies a custom LoRA (Low-Rank Adaptation) model trained on specific images to create unique outputs.
 
 ## Features:
 * Login/Signup
 * Auth
-- ### Train a model (upload your images, can be faces, styles, products, etc...)
+### Train a model (upload your images, can be faces, styles, products, etc...) 😏
 * Generate image from ^ trained model 
 
-## Prerequisites
+## Prerequisites 
 -Python 3.7 or higher
 -pip (Python package manager)
--docker(compose)
+-docker(compose) 
 -docker-postgres-pgadmin
--redis(WSL)
+### redis(WSL) ⚠️
 -celery
 -hypercorn
 
@@ -22,6 +22,7 @@ This is a Flask application that generates images using the Replicate API. It ap
 
 ### Create a virtual environment (optional but recommended):
   python -m venv venv
+  Requirements.txt included 🔋
   
 ### Activate the virtual environment
   On Windows: venv\Scripts\activate
@@ -43,7 +44,7 @@ This is a Flask application that generates images using the Replicate API. It ap
     
 ## Notes
 
-  Keep your Replicate API token confidential and do not share it publicly.
+  Keep your Replicate API token confidential and do not share it publicly. 🚫
   
   The application uses Tailwind CSS for styling. Make sure to set it up correctly.
   
