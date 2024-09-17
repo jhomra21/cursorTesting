@@ -14,6 +14,7 @@ from functools import wraps
 from datetime import datetime
 from sqlalchemy.sql import func
 import requests
+from celery import Celery
 
 load_dotenv()
 
@@ -27,6 +28,11 @@ app.config['SQLALCHEMY_DATABASE_URI'] = db_connection
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
+# Configure Celery
+app.config['CELERY_BROKER_URL'] = 'redis://172.20.116.49:6379/0'
+app.config['CELERY_RESULT_BACKEND'] = 'redis://172.20.116.49:6379/0'
+celery = Celery(app.name, broker=app.config['CELERY_BROKER_URL'])
+celery.conf.update(app.config)
 # print environment variables from .env file
 
 
