@@ -5,7 +5,7 @@ This is a Flask application that generates images using the Replicate API. It ap
 ## Features:
 * Login/Signup
 * Auth
-* ### Train a model (upload your images, can be faces, styles, products, etc...)
+### Train a model (upload your images, can be faces, styles, products, etc...)
 * Generate image from ^ trained model 
 
 ## Prerequisites
