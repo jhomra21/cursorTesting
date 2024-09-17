@@ -12,13 +12,13 @@ This is a Flask application that generates images using the Replicate API. It ap
 - initial setup, in test mode
 
 ## Prerequisites 
--Python 3.7 or higher
--pip (Python package manager)
--docker(compose) 
--docker-postgres-pgadmin
+- Python 3.7 or higher
+- pip (Python package manager)
+- docker(compose) 
+- docker-postgres-pgadmin
 ### redis(WSL) ⚠️
--celery
--hypercorn
+- celery
+- hypercorn
 
 ## Setup
 -Clone this repository or download the source code.
