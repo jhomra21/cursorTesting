@@ -6,7 +6,10 @@ This is a Flask application that generates images using the Replicate API. It ap
 * Login/Signup
 * Auth
 ### Train a model (upload your images, can be faces, styles, products, etc...) 😏
-* Generate image from ^ trained model 
+* Generate image from ^ trained model
+
+### lemonSqueezy
+- initial setup, in test mode
 
 ## Prerequisites 
 -Python 3.7 or higher
@@ -21,17 +24,17 @@ This is a Flask application that generates images using the Replicate API. It ap
 -Clone this repository or download the source code.
 
 ### Create a virtual environment (optional but recommended):
-  python -m venv venv
-  Requirements.txt included 🔋
+  - python -m venv venv
+  - Requirements.txt included 🔋
   
 ### Activate the virtual environment
-  On Windows: venv\Scripts\activate
-  On macOS and Linux: source venv/bin/activate
+  - On Windows: venv\Scripts\activate
+  - On macOS and Linux: source venv/bin/activate
   
 ### Set up the Replicate API token
-  Create a .env file in the project root directory
-  Add the following line, replacing your_replicate_api_token with your actual API token:
-    REPLICATE_API_TOKEN=your_replicate_api_token
+  - Create a .env file in the project root directory
+  -- Add the following line, replacing your_replicate_api_token with your actual API token:
+     REPLICATE_API_TOKEN=your_replicate_api_token
     
 ### Set up Tailwind CSS
   Follow the instructions in this guide: https://flowbite.com/docs/getting-started/flask/
