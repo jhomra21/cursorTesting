@@ -260,3 +260,15 @@ label {
 .hidden {
     display: none;
 }
+
+.flash-message {
+    transition: opacity 0.3s ease-out;
+}
+
+#generate-form {
+    transition: all 0.3s ease-in-out;
+}
+
+#models-list {
+    transition: all 0.3s ease-in-out;
+}

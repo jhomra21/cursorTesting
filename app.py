@@ -90,7 +90,12 @@ class Users(db.Model):
     
     @classmethod
     def get_user_by_email(cls, email):
-        return Users.query.filter_by(email=email).first()
+        user = cls.query.filter_by(email=email).first()
+        return user if user else None
+    @classmethod
+    def get_user_by_username(cls, username):
+        user = cls.query.filter_by(username=username).first()
+        return user if user else None
     
     @classmethod
     def create_user(cls, username, email, password):
@@ -467,9 +472,9 @@ def login():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
-        user = Users.query.filter_by(username=username).first()
+        user = Users.get_user_by_username(username)
         if user and user.password_hash and user.check_password(password):
-            models = Models.query.filter_by(user_id=user.id).all()
+            models = user.get_models()
             # Serialize models data
             if models:
                 serialized_models = [
@@ -526,14 +531,13 @@ def signup():
             flash('Password must be at least 8 characters long.', 'error')
             return redirect(url_for('signup'))
         
-        existing_username = Users.get_user_by_email(email)
-        if existing_username:
+        existing_user = Users.get_user_by_email(email)
+        if existing_user:
             flash('Email already registered.', 'error')
             return redirect(url_for('signup'))
         
         # Create new user
         new_user = Users.create_user(username=username, email=email, password=password)
-       
         if new_user:
             flash('Account created successfully. Please log in.', 'success')
             return redirect(url_for('login'))
