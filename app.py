@@ -1,4 +1,5 @@
 from flask import Flask, request, render_template, redirect, url_for, flash, jsonify, session
+from flask_session import Session
 import replicate
 import os
 from collections import deque
@@ -15,13 +16,16 @@ from datetime import datetime
 from sqlalchemy.sql import func
 import requests
 from celery import Celery
+import hmac
+import hashlib
 
 load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)  # Set a secret key for flash messages
 app.config['SESSION_TYPE'] = 'filesystem'
-
+Session(app)
+WEBHOOK_SECRET = "whsec_V1ch24sYuN1xO2SqW4jX2EP8/NyCOASA"
 # Configure SQLAlchemy
 db_connection = os.getenv("POSTGRES_DB")
 app.config['SQLALCHEMY_DATABASE_URI'] = db_connection
@@ -175,15 +179,35 @@ def get_recent_predictions():
         if pred.status == "succeeded" and pred.output
     ]
 
-# simple auth
+# simple AUTH
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session:
             flash('Please log in to access this page.', 'error')
-            return redirect(url_for('login', next=request.url))
+            return redirect(url_for('login', next=request.full_path))
         return f(*args, **kwargs)
     return decorated_function
+
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    signature = request.headers.get('X-Replicate-Signature')
+    if not signature:
+        return jsonify({"error": "No signature provided"}), 400
+
+    expected_signature = hmac.new(
+        WEBHOOK_SECRET.encode('utf-8'),
+        request.data,
+        hashlib.sha256
+    ).hexdigest()
+
+    if not hmac.compare_digest(signature, expected_signature):
+        return jsonify({"error": "Invalid signature"}), 400
+
+    data = request.json
+    # Process the webhook data
+    print(f"Received valid webhook: {data}")
+    return '', 200
 
 #new route ("/")
 @app.route("/")
@@ -317,8 +341,9 @@ def get_latest_trigger_word():
     # For now, we'll return a default value
     return TRIGGER_WORD
 
-@app.route('/training_status/<training_id>')
-def training_status(training_id):
+@app.route('/training_processing/<training_id>')
+@login_required
+def training_processing(training_id):
     try:
         training = replicate.trainings.get(training_id)
         if training is None:
@@ -347,12 +372,14 @@ def training_status(training_id):
         
         elif training.status == 'succeeded':
             user_id = session.get('user_id')
-            new_model_id = session['trainings'][0]['model_id']
-            model = replicate.models.get(new_model_id)
+            if training.output and 'version' in training.output:
+                version = training.output['version']
+                print("version:", version)
+            model = replicate.models.get(version)
             latest_version = model.latest_version
             if latest_version:
                 print("latest_version:", latest_version)
-                Models.insert_model(user_id=user_id, name=new_model_id, description='', model_version=latest_version.id, status="succeeded")
+                Models.insert_model(user_id=user_id, name=model.id, description='', model_version=latest_version.id, status="succeeded")
            
             else:
                 print("No version available for the model")
@@ -374,6 +401,25 @@ def training_status(training_id):
             })
     except Exception as e:
         return jsonify({"error": str(e), "training_id": training_id}), 400
+
+@celery.task
+def async_train(model_id, training_input):
+    training = replicate.trainings.create(**training_input)
+    return {
+        'id': training.id,
+        'status': training.status,
+        'created_at': training.created_at if training.created_at else None,
+        'completed_at': training.completed_at if training.completed_at else None,
+        'error': str(training.error) if training.error else None,
+        'input': training.input,
+        'output': training.output,
+        'logs': training.logs,
+
+        'urls': {
+            'get': training.urls['get'],
+            'cancel': training.urls['cancel']
+        } if training.urls else None
+    }
 
 @app.route('/upload', methods=['GET', 'POST'])
 @login_required
@@ -404,8 +450,10 @@ def upload_images():
         
         # Reset the buffer position to the beginning
         zip_buffer.seek(0)
+        # Convert zip_buffer to base64 and create a data URI
+        zip_base64 = base64.b64encode(zip_buffer.getvalue()).decode('utf-8')
+        zip_uri = f"data:application/zip;base64,{zip_base64}"
 
-        
         try:
             # Create a new model on Replicate
             new_model = replicate.models.create(
@@ -414,16 +462,11 @@ def upload_images():
                 visibility="private",
                 hardware="gpu-a100-large"
             )
-
-            # Convert zip_buffer to base64 and create a data URI
-            zip_base64 = base64.b64encode(zip_buffer.getvalue()).decode('utf-8')
-            zip_uri = f"data:application/zip;base64,{zip_base64}"
-
             # Create the training using Replicate API
-            training = replicate.trainings.create(
-                destination=f"juanmartbulnes/{new_model.name}",
-                version="ostris/flux-dev-lora-trainer:d995297071a44dcb72244e6c19462111649ec86a9646c32df56daa7f14801944",
-                input={
+            training_input = {
+                "destination": f"juanmartbulnes/{new_model.name}",
+                "version": "ostris/flux-dev-lora-trainer:d995297071a44dcb72244e6c19462111649ec86a9646c32df56daa7f14801944",
+                "input": {
                     "steps": 800,
                     "lora_rank": 16,
                     "optimizer": "adamw8bit",
@@ -434,26 +477,21 @@ def upload_images():
                     "trigger_word": trigger_word,
                     "learning_rate": 0.0004,
                 },
-            )
-            # add training to session
-            if 'trainings' not in session:
-                session['trainings'] = []
-            session['trainings'].append({
-                'id': training.id,
-                'status': training.status,
-                'logs': training.logs,
-                'model_id': new_model.id,
-                'model_name': new_model.name,
-               
-            })
+                # 'webhook': url_for('webhook', _external=True)
+            }
 
-            session.modified = True
+            task = async_train.delay(new_model.id, training_input)
+
+            # add training to session
+            user_id = session.get('user_id')
+            new_training = Models.insert_model(user_id=user_id, name=new_model.name, description='', model_version='', status="succeeded")
             #return json with training info and add to session
             return jsonify({
-                "id": training.id,
-                "status": training.status,
-                "logs": training.logs
-            }), 200
+                "task_id": task.id,
+                "model_id": new_model.id,
+                "model_name": new_model.name,
+                "status": "pending",
+            }), 202
 
         except Exception as e:
             flash(f'Error creating model or starting training: {str(e)}', 'error')
@@ -461,10 +499,33 @@ def upload_images():
     
     return render_template('upload.html')
 
+@app.route('/training_status/<task_id>')
+@login_required
+def check_training_status(task_id):
+    task = async_train.AsyncResult(task_id)
+    if task.state == 'PENDING':
+        response = {
+            'state': task.state,
+            'status': 'Task is pending...'
+        }
+    elif task.state == 'SUCCESS':
+        training_data = task.result
+        response = {
+            'state': task.state,
+            'status': training_data['status'],
+            'id': training_data['id'],
+            'created_at': training_data['created_at'],
+            'completed_at': training_data['completed_at'],
+            'error': training_data['error']
+        }
+    else:
+        response = {
+            'state': task.state,
+            'status': str(task.info),
+        }
+    return jsonify(response)
 
-
-
-
+# -------- user stuff --------
 @app.route('/allusers')
 @login_required
 def all_users():
@@ -487,10 +548,8 @@ def login():
                     {
                     'id': model.id,
                     'name': model.name,
-                    'description': model.description,
-                    'created_at': model.created_at.isoformat() if model.created_at else None,
-                    'updated_at': model.updated_at.isoformat() if model.updated_at else None,
-                    'model_version': model.model_version
+                    'model_version': model.model_version,
+                    'status': model.status
                     } for model in models
                 ]
                 session['models'] = serialized_models
@@ -503,11 +562,9 @@ def login():
             flash('Logged in successfully.', 'success')
             print(f"User logged in: {user.id}")
             print(f"User logged in: {user.username}")
-            if not session['models']:
-                flash("Time to train a model!", "info")
-                return redirect(url_for('upload_images'))
-            flash("Model(s) found!", "info")
+            # next_page = request.form.get('next') or url_for('generate_image')
             return redirect(url_for('generate_image'))
+                
         else:
             flash('Invalid username or password.', 'error')
     return render_template('login.html')
