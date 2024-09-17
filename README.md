@@ -2,10 +2,10 @@
 
 This is a Flask application that generates images using the Replicate API. It applies a custom LoRA (Low-Rank Adaptation) model trained on specific images to create unique outputs.
 
-##Features:
+## Features:
 *Login/Signup
 *Auth
-*###Train a model (upload your images, can be faces, styles, products, etc...)
+* ### Train a model (upload your images, can be faces, styles, products, etc...)
 *Generate image from ^ trained model 
 
 ## Prerequisites
