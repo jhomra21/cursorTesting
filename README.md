@@ -33,7 +33,7 @@ This is a Flask application that generates images using the Replicate API. It ap
   
 ### Set up the Replicate API token
   - Create a .env file in the project root directory
-  -- Add the following line, replacing your_replicate_api_token with your actual API token:
+  - - Add the following line, replacing your_replicate_api_token with your actual API token:
      REPLICATE_API_TOKEN=your_replicate_api_token
     
 ### Set up Tailwind CSS
