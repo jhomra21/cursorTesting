@@ -84,6 +84,25 @@ class Users(db.Model):
         if not self.password_hash:
             return False
         return check_password_hash(self.password_hash, password)
+    
+    def get_models(self):
+        return self.models
+    
+    @classmethod
+    def get_user_by_email(cls, email):
+        return Users.query.filter_by(email=email).first()
+    
+    @classmethod
+    def create_user(cls, username, email, password):
+        if cls.query.filter((cls.username == username) | (cls.email == email)).first():
+            flash("Username or email already exists", "error")
+            return redirect(url_for('signup'))
+            # raise ValueError("Username or email already exists")
+        new_user = cls(username=username, email=email)
+        new_user.set_password(password)
+        db.session.add(new_user)
+        db.session.commit()
+        return new_user
 
     def __repr__(self):
         return f'<User {self.username}>'
@@ -117,11 +136,17 @@ class Models(db.Model):
         self.status = status
 
     @classmethod
-    def insert_model(cls):  #, user_id, name, description, model_version
-        # new_model = cls(user_id=user_id, name=name, description=description, model_version=model_version)
-        db.session.add(cls)
-        db.session.commit()
+    def insert_model(cls, user_id, name, description, model_version, status):
+        # Check if a model with the same name already exists for this user
+        if cls.query.filter_by(user_id=user_id, name=name).first():
+            raise ValueError("A model with this name already exists for this user")
 
+        new_model = cls(user_id=user_id, name=name, description=description, 
+                        model_version=model_version, status=status)
+        db.session.add(new_model)
+        db.session.commit()
+        return new_model
+    
     def __repr__(self):
         return f'<Model {self.name}>'
 
@@ -316,9 +341,8 @@ def training_status(training_id):
             latest_version = model.latest_version
             if latest_version:
                 print("latest_version:", latest_version)
-                new_db_model = Models(user_id=user_id, name=new_model_id, description='', model_version=latest_version.id, status="succeeded")
-                db.session.add(new_db_model)
-                db.session.commit()
+                Models.insert_model(user_id=user_id, name=new_model_id, description='', model_version=latest_version.id, status="succeeded")
+           
             else:
                 print("No version available for the model")
                 # Handle the case where no version is available
@@ -419,73 +443,7 @@ def upload_images():
                 "status": training.status,
                 "logs": training.logs
             }), 200
-            
-            TRIGGER_WORD = trigger_word
-            NEW_MODEL_NAME = new_model.name
 
-            # Add a while loop to check training status
-            import time
-            max_attempts = 60  # Adjust this value based on expected training time
-            attempt = 0
-            while attempt < max_attempts:
-                training = replicate.trainings.get(training.id)
-                if training.status == 'failed':
-                    # Training completed failed
-                    flash(f'Training failed for model: {new_model.name}', 'error')
-                    # TODO: add model to db with updated training id/version; also update model id and version so the user can go generate
-                    break
-                elif training.status == 'succeeded':
-                    # Training succeeded
-                    flash(f'Training finished successfully! Model: {new_model.name}', 'success')
-                    # if training succeeded Update the model version in the database and session
-                    # Get the latest version of the model after training
-                    model = replicate.models.get(new_model.id)
-                    latest_version = model.latest_version
-                    if latest_version:
-                        print("latest_version:", latest_version)
-                        new_db_model = Models(user_id=user_id, name=new_model.id, description=new_model.description, model_version=latest_version.id, status="succeeded")
-                        db.session.add(new_db_model)
-                        db.session.commit()
-                    else:
-                        print("No version available for the model")
-                        # Handle the case where no version is available
-                     # need to test this, not sure what hash is returned
-                    #print("latest_version:", latest_version)
-                    #new_db_model = Models(user_id=user_id, name=new_model.id, description=new_model.description, model_version=latest_version.id)
-                    
-
-                    # Update the session data
-                    new_model_data = {
-                        'id': new_db_model.id,
-                        'name': new_db_model.name,
-                        'description': new_db_model.description,
-                        'created_at': new_db_model.created_at.isoformat() if new_db_model.created_at else None,
-                        'updated_at': new_db_model.updated_at.isoformat() if new_db_model.updated_at else None,
-                        'model_version': latest_version
-                    }
-                    
-                    if 'models' not in session:
-                        session['models'] = []
-                    session['models'].append(new_model_data)
-                    session.modified = True
-                    break
-                elif training.status == 'canceled':
-                    # Training canceled
-                    flash(f'Training canceled for model: {new_model.name}', 'error')
-                    break
-                else:
-                    # Training still in progress
-                    print(f"Training status: {training.status}")
-                    print(f"Training logs: {training.logs}")
-                    time.sleep(60)  # Wait for 60 seconds before checking again
-                    attempt += 1
-
-            if attempt == max_attempts:
-                flash(f'Training status check timed out for model: {new_model.name}', 'warning')
-
-            
-
-            return redirect(url_for('generate_image'))
         except Exception as e:
             flash(f'Error creating model or starting training: {str(e)}', 'error')
             return jsonify({"status": "error", "message": str(e)})
@@ -568,20 +526,17 @@ def signup():
             flash('Password must be at least 8 characters long.', 'error')
             return redirect(url_for('signup'))
         
-        existing_username = Users.query.filter_by(username=username).first()
-        existing_email = Users.query.filter_by(email=email).first()
-        if existing_username or existing_email:
-            flash('Username or email already exists.', 'error')
+        existing_username = Users.get_user_by_email(email)
+        if existing_username:
+            flash('Email already registered.', 'error')
             return redirect(url_for('signup'))
         
         # Create new user
-        new_user = Users(username=username, email=email)
-        new_user.set_password(password)
-        db.session.add(new_user)
-        db.session.commit()
-        
-        flash('Account created successfully. Please log in.', 'success')
-        return redirect(url_for('login'))
+        new_user = Users.create_user(username=username, email=email, password=password)
+       
+        if new_user:
+            flash('Account created successfully. Please log in.', 'success')
+            return redirect(url_for('login'))
     
     return render_template('signup.html')
 
