@@ -2,11 +2,20 @@
 
 This is a Flask application that generates images using the Replicate API. It applies a custom LoRA (Low-Rank Adaptation) model trained on specific images to create unique outputs.
 
+##Features:
+*Login/Signup
+*Auth
+*###Train a model (upload your images, can be faces, styles, products, etc...)
+*Generate image from ^ trained model 
+
 ## Prerequisites
 -Python 3.7 or higher
 -pip (Python package manager)
 -docker(compose)
 -docker-postgres-pgadmin
+-redis(WSL)
+-celery
+-hypercorn
 
 ## Setup
 -Clone this repository or download the source code.
