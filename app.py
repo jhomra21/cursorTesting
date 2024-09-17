@@ -244,14 +244,15 @@ def generate_image():
 
     # Add these lines before rendering the template
     model_name = NEW_MODEL_NAME
-    lora_name = CURRENT_LORA.split("/")[-1] if CURRENT_LORA else "None"
+    # lora_name = CURRENT_LORA.split("/")[-1] if CURRENT_LORA else "None"
 
     # Update the render_template call
     is_logged_in = 'user_id' in session
     user_id = session.get('user_id')
     username = session.get('username')
     models = session.get('models', [])
-    
+    # make me split for lora name as /lora_name-lora-version from session model name getting lora_name dont include / before lora_name
+    lora_name = models[0]['name'].split('/')[1].split('-')[0] if models else "None"
     # Format models as "name:version"
     formatted_models = [f"{model['name']}:{model['model_version']}" for model in models]
 
@@ -324,7 +325,10 @@ def training_status(training_id):
             session.pop('trainings', None)
             session.modified = True
             flash(f'Training finished successfully! Model: {training.id}', 'success')
-            return redirect(url_for('generate_image'))
+            return jsonify({
+                "id": training.id,
+                "status": 'succeeded'
+            }),200
         else:
             return jsonify({
                 "id": training.id,
@@ -334,7 +338,7 @@ def training_status(training_id):
                 "cancel_url": getattr(training.urls, 'cancel', None) if training.status in ['starting', 'processing'] else None
             })
     except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"error": str(e), "training_id": training_id}), 400
 
 @app.route('/upload', methods=['GET', 'POST'])
 @login_required

@@ -134,7 +134,12 @@
                 if (data.status !== 'canceled' || data.status !== 'failed') {
                     statusCheckInterval = setInterval(() => checkTrainingStatus(data.id), 20000);
                     checkTrainingStatus(data.id);
-                } else {
+                }
+                else if (data.status  === 'succeeded') {
+                    clearInterval(statusCheckInterval);
+                    window.location.href = '/generate';
+                }
+                else {
                     throw new Error(data.message || 'Unexpected response from server');
                 }
             })
