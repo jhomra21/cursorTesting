@@ -130,8 +130,8 @@ def generate_image():
     data = request.get_json()
     prompt = data.get("prompt")
     model_id = data.get("modelId")
-    num_inference_steps = data.get("num_inference_steps", 50)
-    guidance_scale = data.get("guidance_scale", 7.5)
+    num_inference_steps = data.get("num_inference_steps", 22)
+    guidance_scale = data.get("guidance_scale", 3.5)
     lora_scale = data.get("lora_scale", 0.8)
 
     if not prompt or not model_id:

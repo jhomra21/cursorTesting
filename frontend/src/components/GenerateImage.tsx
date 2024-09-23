@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { User, Model } from '../types';
+import { Button } from './ui/button';
+import { Input } from './ui/input';
+import { Slider } from './ui/slider';
+import { DownloadIcon } from '@radix-ui/react-icons';
 
 interface GenerateImageProps {
     user: User | null;
@@ -12,6 +16,9 @@ const GenerateImage: React.FC<GenerateImageProps> = ({ user, models, onLogout })
     const [prompt, setPrompt] = useState('');
     const [imageUrl, setImageUrl] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    const [loraScale, setLoraScale] = useState(0.8);
+    const [guidanceScale, setGuidanceScale] = useState(3.5);
+    const [inferenceSteps, setInferenceSteps] = useState(22);
     const { modelId } = useParams<{ modelId: string }>();
     const navigate = useNavigate();
 
@@ -34,7 +41,13 @@ const GenerateImage: React.FC<GenerateImageProps> = ({ user, models, onLogout })
                     'Content-Type': 'application/json',
                 },
                 credentials: 'include',
-                body: JSON.stringify({ prompt, modelId }),
+                body: JSON.stringify({ 
+                    prompt, 
+                    modelId, 
+                    loraScale, 
+                    guidanceScale, 
+                    inferenceSteps 
+                }),
             });
 
             if (!response.ok) {
@@ -55,23 +68,42 @@ const GenerateImage: React.FC<GenerateImageProps> = ({ user, models, onLogout })
         navigate('/');
     };
 
+    const handleDownload = async () => {
+        try {
+            const response = await fetch(imageUrl);
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = 'generated-image.png';
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+        } catch (error) {
+            console.error('Error downloading image:', error);
+        }
+    };
+
     return (
         <div className="max-w-md mx-auto mt-8">
             <div className="flex justify-between items-center mb-4">
                 <h2 className="text-2xl font-bold">Generate Image</h2>
                 <div>
-                    <button
+                    <Button
                         onClick={handleBackToModels}
-                        className="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline mr-2"
+                        variant="outline"
+                        className="mr-2 hover:bg-gray-900 hover:text-white"
                     >
                         Back to Models
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                         onClick={onLogout}
-                        className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+                        variant="outline"
+                        className="hover:bg-red-500 hover:text-white"
                     >
                         Logout
-                    </button>
+                    </Button>
                 </div>
             </div>
             {model && <p className="mb-4">Model: {model.name}</p>}
@@ -80,27 +112,78 @@ const GenerateImage: React.FC<GenerateImageProps> = ({ user, models, onLogout })
                     <label htmlFor="prompt" className="block text-sm font-medium text-gray-700">
                         Prompt
                     </label>
-                    <input
+                    <Input
                         type="text"
                         id="prompt"
                         value={prompt}
                         onChange={(e) => setPrompt(e.target.value)}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50"
+                        className="mt-1 block w-full"
                         required
                     />
                 </div>
-                <button
+                <div>
+                    <label htmlFor="loraScale" className="block text-sm font-medium text-gray-700">
+                        Lora Scale: {loraScale}
+                    </label>
+                    <Slider
+                        id="loraScale"
+                        min={0}
+                        max={1}
+                        step={0.1}
+                        value={[loraScale]}
+                        onValueChange={(value) => setLoraScale(value[0])}
+                    />
+                </div>
+                <div>
+                    <label htmlFor="guidanceScale" className="block text-sm font-medium text-gray-700">
+                        Guidance Scale: {guidanceScale}
+                    </label>
+                    <Slider
+                        id="guidanceScale"
+                        min={1}
+                        max={10}
+                        step={0.1}
+                        value={[guidanceScale]}
+                        onValueChange={(value) => setGuidanceScale(value[0])}
+                    />
+                </div>
+                <div>
+                    <label htmlFor="inferenceSteps" className="block text-sm font-medium text-gray-700">
+                        Inference Steps: {inferenceSteps}
+                    </label>
+                    <Slider
+                        id="inferenceSteps"
+                        min={10}
+                        max={38}
+                        step={1}
+                        value={[inferenceSteps]}
+                        onValueChange={(value) => setInferenceSteps(value[0])}
+                    />
+                </div>
+                <Button
                     type="submit"
-                    className="w-full bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
                     disabled={isLoading}
+                    className="w-full"
                 >
                     {isLoading ? 'Generating...' : 'Generate Image'}
-                </button>
+                </Button>
             </form>
             {imageUrl && (
-                <div className="mt-8">
+                <div className="mt-8 relative group">
                     <h3 className="text-xl font-bold mb-2">Generated Image:</h3>
-                    <img src={imageUrl} alt="Generated" className="w-full rounded-lg shadow-lg" />
+                    <div className="relative">
+                        <img src={imageUrl} alt="Generated" className="w-full rounded-lg shadow-lg" />
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                            <Button
+                                onClick={handleDownload}
+                                variant="secondary"
+                                className="bg-white bg-opacity-75 hover:bg-opacity-100"
+                            >
+                                <DownloadIcon className="mr-2 h-4 w-4" />
+                                Download
+                            </Button>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

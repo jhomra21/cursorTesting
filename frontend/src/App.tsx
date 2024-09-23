@@ -4,11 +4,20 @@ import Login from './components/Login';
 import GenerateImage from './components/GenerateImage';
 import { Model, User } from './types';
 import { useAuth } from './hooks/useAuth';
-import { Button } from './components/ui/button';
+import { Button, buttonVariants } from './components/ui/button';
+import { ReloadIcon } from "@radix-ui/react-icons"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 
 function App() {
     const { user, logout, isLoading } = useAuth();
-    const [models, setModels] = useState<Model[]>([]);
+    const [models, setModels] = useState<Model[] | null>(null);
 
     useEffect(() => {
         const fetchModels = async () => {
@@ -25,10 +34,10 @@ function App() {
                         setModels(data);
                     } else if (response.status === 401) {
                         console.error('Unauthorized access when fetching models');
-                        // Don't logout here, just log the error
                     }
                 } catch (error) {
                     console.error('Error fetching models:', error);
+                    setModels([]); // Set to empty array if there's an error
                 }
             }
         };
@@ -37,7 +46,10 @@ function App() {
     }, [user]);
 
     if (isLoading) {
-        return <div>Loading...</div>;
+        return <Button disabled>
+        <ReloadIcon className="mr-2 h-4 w-4 animate-spin" />
+        Loading...
+      </Button>;
     }
 
     return (
@@ -59,29 +71,42 @@ function App() {
                                         >
                                             Logout
                                         </Button>
-                                        
                                     </div>
-                                    {models.length > 0 ? (
-                                        <ul className="space-y-4">
+                                  
+                                    {models === null ? (
+                                        <Button disabled>
+                                            <ReloadIcon className="mr-2 h-4 w-4 animate-spin" />
+                                            Modules are loading...
+                                        </Button>
+                                    ) : models.length > 0 ? (
+                                      <Card className="space-y-4 m-2 p-4">
+                                        
                                             {models.map(model => (
-                                                <li key={model.id} className="bg-white shadow rounded p-4">
-                                                    <h2 className="text-xl font-semibold">{model.name}</h2>
-                                                    <p className="text-gray-600">{model.description}</p>
-                                                    <p className="text-sm">Version: {model.model_version}</p>
-                                                    <p className="text-sm">Status: {model.status}</p>
+                                                <Card key={model.id} className="bg-white shadow rounded p-4">
+                                                    <CardHeader>
+                                                        <CardTitle>{model.name}</CardTitle>
+                                                        <CardDescription>{model.description}</CardDescription>
+                                                    </CardHeader>
+                                                    <CardContent>
+                                                        <p>Version: {model.model_version}</p>
+                                                        <p>Status: {model.status}</p>
+                                                    </CardContent>
                                                     {model.model_version && (
                                                         <Link 
                                                             to={`/generate/${model.id}`}
-                                                            className="mt-2 inline-block bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+                                                            className={buttonVariants({ variant: "outline" }) + " hover:bg-blue-700 hover:text-white font-bold py-2 px-4 rounded"}
                                                         >
                                                             Generate Image
                                                         </Link>
                                                     )}
-                                                </li>
+                                                </Card>
                                             ))}
-                                        </ul>
+                                       
+                                        </Card>
                                     ) : (
-                                        <p>No models available.</p>
+                                        <Button disabled>
+                                            No Modules Found
+                                        </Button>
                                     )}
                                 </>
                             )
@@ -91,7 +116,7 @@ function App() {
                             user ? (
                                 <GenerateImage 
                                     user={user} 
-                                    models={models} 
+                                    models={models || []} 
                                     onLogout={logout}  // Add this line
                                 />
                             ) : (
