@@ -17,11 +17,12 @@ import hmac
 import hashlib
 from flask_cors import CORS
 from models import db, Users, Models  # Import models
+from flask_jwt_extended import JWTManager, jwt_required, create_access_token, get_jwt_identity
 
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app, supports_credentials=True)
+CORS(app, resources={r"/*": {"origins": "http://localhost:5173"}}, supports_credentials=True, allow_headers=["Content-Type", "Authorization"])
 app.secret_key = os.urandom(24)  # Set a secret key for flash messages
 app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SESSION_COOKIE_SECURE'] = True  # For HTTPS
@@ -372,55 +373,64 @@ def all_users():
     user_id = session.get('user_id')
     return render_template('allusers.html', users=users, is_logged_in=is_logged_in, user_id=user_id)
 
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        if not request.is_json:
-            return jsonify({"error": "Request must be JSON"}), 400
+# Add this after your other configurations
+app.config['JWT_SECRET_KEY'] = 'your-secret-key'  # Change this to a secure random key
+app.config['JWT_TOKEN_LOCATION'] = ['headers']
+jwt = JWTManager(app)
 
-        data = request.get_json()
-        username = data.get("username")
-        password = data.get("password")
-
-        user = Users.get_user_by_username(username)
-        if user and user.password_hash and user.check_password(password):
-            models = user.get_models()
-            serialized_models = [
-                {
-                    'id': model.id,
-                    'name': model.name,
-                    'model_version': model.model_version,
-                    'status': model.status
-                } for model in models
-            ]
-            
-            session['user_id'] = user.id
-            session['username'] = user.username
-            session['models'] = serialized_models
-
+# Add this new route for token verification
+@app.route('/api/verify-token', methods=['GET', 'OPTIONS'])
+def verify_token():
+    if request.method == 'OPTIONS':
+        return '', 200
+    
+    @jwt_required()
+    def get():
+        current_user_id = get_jwt_identity()
+        user = Users.query.get(current_user_id)
+        if user:
             return jsonify({
-                "message": "Logged in successfully",
-                "user_id": user.id,
+                "id": user.id,
                 "username": user.username,
-                "models": serialized_models
-            })
-        else:
-            return jsonify({"error": "Invalid username or password"}), 401
+            }), 200
+        return jsonify({"msg": "User not found"}), 404
+    
+    return get()
+
+# Modify your login route to return a JWT token
+@app.route('/login', methods=['POST', 'OPTIONS'])
+def login():
+    if request.method == 'OPTIONS':
+        return '', 200
+    if not request.is_json:
+        return jsonify({"error": "Request must be JSON"}), 400
+
+    data = request.get_json()
+    username = data.get("username")
+    password = data.get("password")
+
+    user = Users.get_user_by_username(username)
+    if user and user.password_hash and user.check_password(password):
+        access_token = create_access_token(identity=user.id)
+        models = user.get_models()
+        serialized_models = [
+            {
+                'id': model.id,
+                'name': model.name,
+                'model_version': model.model_version,
+                'status': model.status
+            } for model in models
+        ]
+        
+        return jsonify({
+            "message": "Logged in successfully",
+            "user_id": user.id,
+            "username": user.username,
+            "models": serialized_models,
+            "access_token": access_token
+        })
     else:
-        return jsonify({"error": "Please use POST method for login"}), 405
-
-@app.route('/logout')
-def logout():
-    user_id = session.pop('user_id', None)
-    session.clear()
-    return jsonify({"message": "Logged out successfully"})
-
-def fix_user_passwords():
-    users_without_password = Users.query.filter_by(password_hash=None).all()
-    for user in users_without_password:
-        user.set_password('default_password')
-    db.session.commit()
-    print(f"Fixed {len(users_without_password)} users with default passwords.")
+        return jsonify({"error": "Invalid username or password"}), 401
 
 @app.route('/signup', methods=['GET', 'POST'])
 def signup():
@@ -533,14 +543,17 @@ def create_checkout():
         return jsonify({'error': 'Failed to create checkout'}), 400
     
 
-@app.route('/api/data', methods=['GET'])
-@login_required
+@app.route('/api/data', methods=['GET', 'OPTIONS'])
+@jwt_required()
 def get_data():
-    user_id = session.get('user_id')
-    if not user_id:
-        return jsonify({"error": "User not authenticated"}), 401
+    if request.method == 'OPTIONS':
+        return '', 200
+    current_user_id = get_jwt_identity()
+    user = Users.query.get(current_user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
     
-    models = Models.query.filter_by(user_id=user_id).all()
+    models = Models.query.filter_by(user_id=current_user_id).all()
     models_data = [
         {
             'id': model.id,
@@ -555,6 +568,14 @@ def get_data():
         for model in models
     ]
     return jsonify(models_data)
+
+@app.route('/logout', methods=['POST', 'OPTIONS'])
+@jwt_required()
+def logout():
+    if request.method == 'OPTIONS':
+        return '', 200
+    # Perform any server-side logout operations here
+    return jsonify({"message": "Logged out successfully"}), 200
 
 @app.errorhandler(404)
 def not_found(error):

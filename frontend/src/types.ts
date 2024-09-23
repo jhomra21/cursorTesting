@@ -1,7 +1,6 @@
 export interface User {
-    user_id: number;
+    id: number;
     username: string;
-    models: any[]
 }
 
 export interface Model {
