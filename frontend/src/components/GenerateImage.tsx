@@ -4,7 +4,7 @@ import { User, Model } from '../types';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Slider } from './ui/slider';
-import { DownloadIcon } from '@radix-ui/react-icons';
+import { DownloadIcon, ReloadIcon } from '@radix-ui/react-icons';
 
 interface GenerateImageProps {
     user: User | null;
@@ -165,7 +165,7 @@ const GenerateImage: React.FC<GenerateImageProps> = ({ user, models, onLogout })
                     disabled={isLoading}
                     className="w-full"
                 >
-                    {isLoading ? 'Generating...' : 'Generate Image'}
+                    {isLoading ? <ReloadIcon className="mr-2 h-4 w-4 animate-spin" /> : 'Generate Image'}
                 </Button>
             </form>
             {imageUrl && (

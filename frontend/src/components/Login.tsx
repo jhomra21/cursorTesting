@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { Button } from './ui/button';
+import { Button, buttonVariants } from './ui/button';
 import { Input } from './ui/input';
 import {
     Card,
@@ -11,6 +11,7 @@ import {
     CardHeader,
     CardTitle,
 } from "@/components/ui/card"
+import { Link } from 'react-router-dom';
 
 function Login() {
     const [username, setUsername] = useState('');
@@ -68,11 +69,14 @@ function Login() {
                         </div>
                         
                         <div className="flex justify-end">
-                            <Button type="submit" variant="outline">Sign In</Button>
+                            <Button type="submit" variant="outline" className="hover:bg-gray-900 hover:text-white">Sign In</Button>
 
                         </div>
                     </form>
                 </CardContent>
+                <CardFooter>
+                    <p className="text-sm text-gray-500">Don't have an account? <Link className={buttonVariants({ variant: "outline" }) + " hover:bg-gray-900 hover:text-white"} to="/register">Register</Link></p>
+                </CardFooter>
             </Card>
         </div>
     );

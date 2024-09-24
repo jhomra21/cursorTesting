@@ -2,18 +2,20 @@ import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Route, Routes, Navigate, Link } from 'react-router-dom';
 import Login from './components/Login';
 import GenerateImage from './components/GenerateImage';
+import Register from './components/Register';
 import { Model, User } from './types';
 import { useAuth } from './hooks/useAuth';
 import { Button, buttonVariants } from './components/ui/button';
 import { ReloadIcon } from "@radix-ui/react-icons"
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
+    Card,
+    CardContent,
+    CardDescription,
+    CardFooter,
+    CardHeader,
+    CardTitle,
 } from "@/components/ui/card"
+import CreateTraining from './components/CreateTraining';
 
 function App() {
     const { user, logout, isLoading } = useAuth();
@@ -47,9 +49,9 @@ function App() {
 
     if (isLoading) {
         return <Button disabled>
-        <ReloadIcon className="mr-2 h-4 w-4 animate-spin" />
-        Loading...
-      </Button>;
+            <ReloadIcon className="mr-2 h-4 w-4 animate-spin" />
+            Loading...
+        </Button>;
     }
 
     return (
@@ -65,22 +67,25 @@ function App() {
                                 <>
                                     <div className="flex justify-between items-center mb-4">
                                         <p>Welcome, {user.username}!</p>
-                                        <Button 
+                                        <Button
                                             onClick={logout}
                                             variant="destructive"
                                         >
                                             Logout
                                         </Button>
                                     </div>
-                                  
+                                    <div className="flex justify-start">
+                                        <Link to="/create-training" className={buttonVariants({ variant: "outline" }) + " m-2 hover:bg-green-800 hover:text-white"}>Train Model</Link>
+                                    </div>
+
                                     {models === null ? (
                                         <Button disabled>
                                             <ReloadIcon className="mr-2 h-4 w-4 animate-spin" />
                                             Modules are loading...
                                         </Button>
                                     ) : models.length > 0 ? (
-                                      <Card className="space-y-4 m-2 p-4">
-                                        
+                                        <Card className="space-y-4 m-2 p-4">
+
                                             {models.map(model => (
                                                 <Card key={model.id} className="bg-white shadow rounded p-4">
                                                     <CardHeader>
@@ -92,16 +97,18 @@ function App() {
                                                         <p>Status: {model.status}</p>
                                                     </CardContent>
                                                     {model.model_version && (
-                                                        <Link 
-                                                            to={`/generate/${model.id}`}
-                                                            className={buttonVariants({ variant: "outline" }) + " hover:bg-blue-700 hover:text-white font-bold py-2 px-4 rounded"}
-                                                        >
-                                                            Generate Image
-                                                        </Link>
+                                                        <CardFooter>
+                                                            <Link
+                                                                to={`/generate/${model.id}`}
+                                                                className={buttonVariants({ variant: "outline" }) + " hover:bg-blue-700 hover:text-white font-bold py-2 px-4 rounded"}
+                                                            >
+                                                                Generate Image
+                                                            </Link>
+                                                        </CardFooter>
                                                     )}
                                                 </Card>
                                             ))}
-                                       
+
                                         </Card>
                                     ) : (
                                         <Button disabled>
@@ -114,15 +121,17 @@ function App() {
                         <Route path="/login" element={!user ? <Login /> : <Navigate to="/" />} />
                         <Route path="/generate/:modelId" element={
                             user ? (
-                                <GenerateImage 
-                                    user={user} 
-                                    models={models || []} 
+                                <GenerateImage
+                                    user={user}
+                                    models={models || []}
                                     onLogout={logout}  // Add this line
                                 />
                             ) : (
                                 <Navigate to="/login" />
                             )
                         } />
+                        <Route path="/register" element={!user ? <Register /> : <Navigate to="/" />} />
+                        <Route path="/create-training" element={user ? <CreateTraining /> : <Navigate to="/login" />} />
                     </Routes>
                 </header>
             </div>
