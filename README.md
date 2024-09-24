@@ -35,7 +35,7 @@ To set up the Supabase integration:
 3. Replace `your_supabase_url` and `your_supabase_anon_key` with your actual Supabase project credentials.
 
 >[!WARNING]
-> **WARNING** Make sure to never commit your `.env` file to version control.
+> **WARNING** Make sure to never commit your `.env` file.
 
 ### lemonSqueezy
 - initial setup, in test mode
@@ -90,8 +90,9 @@ To set up the Supabase integration:
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
     
 ## Notes
-
- 🚫🚫 Keep your Replicate API token confidential and do not share it publicly! 🚫🚫
+>[!CAUTION]
+> **CAUTION** Keep your Replicate API token confidential and do not share it publicly!
+ 
   
   The application uses Tailwind CSS for styling. Make sure to set it up correctly (read this guide: https://flowbite.com/docs/getting-started/flask/ or tailwind docs)
   
