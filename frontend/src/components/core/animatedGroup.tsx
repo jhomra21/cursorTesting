@@ -76,7 +76,7 @@ const presetVariants: Record<
   'blur-slide': {
     container: defaultContainerVariants,
     item: {
-      hidden: { opacity: 0, filter: 'blur(4px)', y: 20 },
+      hidden: { opacity: 0, filter: 'blur(4px)', y: 100 },
       visible: { opacity: 1, filter: 'blur(0px)', y: 0 },
     },
   },
