@@ -200,3 +200,5 @@ flask_session/
 /flask_session/*
 **/flask_session/
 **/*.session
+backend/flask_session/
+backend/flask_session/*
