@@ -10,28 +10,28 @@ This is a Flask application that lets users create accounts, log in, upload imag
 * Generate image from ^ trained model
 >[!NOTE]
 >## Recent Updates
-
-### Supabase Integration
-
-Recently integrated Supabase into the project. Here are the key changes:
-
-- Added Supabase client configuration in `frontend/src/supabaseClient.ts`
-- Updated environment variables to include Supabase URL and anonymous key
-- Integrated Supabase client in `frontend/src/App.tsx` for database operations
-
-To set up the Supabase integration:
-
-1. Install the Supabase client:
-   ```
-   bun add @supabase/supabase-js
-   ```
-
-2. Add the following to your `.env` file:
-   ```
-   REACT_APP_SUPABASE_URL=your_supabase_url
-   REACT_APP_SUPABASE_ANON_KEY=your_supabase_anon_key
-   ```
-
+>
+>### Supabase Integration
+>
+>Recently integrated Supabase into the project. Here are the key changes:
+>
+>- Added Supabase client configuration in `frontend/src/supabaseClient.ts`
+>- Updated environment variables to include Supabase URL and anonymous key
+>- Integrated Supabase client in `frontend/src/App.tsx` for database operations
+>
+>To set up the Supabase integration:
+>
+>1. Install the Supabase client:
+>   ```
+>   bun add @supabase/supabase-js
+>   ```
+>
+>2. Add the following to your `.env` file:
+>   ```
+>   REACT_APP_SUPABASE_URL=your_supabase_url
+>   REACT_APP_SUPABASE_ANON_KEY=your_supabase_anon_key
+>   ```
+>
 >3. Replace `your_supabase_url` and `your_supabase_anon_key` with your actual Supabase project credentials.
 
 >[!WARNING]
