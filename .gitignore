@@ -195,6 +195,5 @@ yarn-error.log*
 # flask_session
 flask_session/
 *.session
-
-# flask_session
-flask_session/
+/flask_session
+/flask_session/*
