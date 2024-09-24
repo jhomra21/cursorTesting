@@ -5,6 +5,7 @@ import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Slider } from './ui/slider';
 import { DownloadIcon, ReloadIcon } from '@radix-ui/react-icons';
+import { AnimatedGroup } from './core/animatedGroup';
 
 interface GenerateImageProps {
     user: User | null;
@@ -169,6 +170,7 @@ const GenerateImage: React.FC<GenerateImageProps> = ({ user, models, onLogout })
                 </Button>
             </form>
             {imageUrl && (
+                <AnimatedGroup preset="blur">
                 <div className="mt-8 relative group">
                     <h3 className="text-xl font-bold mb-2">Generated Image:</h3>
                     <div className="relative">
@@ -184,7 +186,7 @@ const GenerateImage: React.FC<GenerateImageProps> = ({ user, models, onLogout })
                             </Button>
                         </div>
                     </div>
-                </div>
+                </div></AnimatedGroup>
             )}
         </div>
     );

@@ -19,15 +19,19 @@ import CreateTraining from './components/CreateTraining';
 import { AnimatedGroup } from './components/core/animatedGroup';
 
 function App() {
-    const { user, logout, isLoading } = useAuth();
+    const { user, login, logout, isLoading } = useAuth();
     const [models, setModels] = useState<Model[] | null>(null);
 
     useEffect(() => {
         const fetchModels = async () => {
             if (user) {
                 try {
-                    const token = localStorage.getItem('token');
-                    const response = await fetch('http://localhost:5000/api/data', {
+                    const token = localStorage.getItem('access_token'); // Change 'token' to 'access_token'
+                    if (!token) {
+                        console.error('No access token found');
+                        return;
+                    }
+                    const response = await fetch('http://localhost:5000/data', {
                         headers: {
                             'Authorization': `Bearer ${token}`
                         }
@@ -37,6 +41,7 @@ function App() {
                         setModels(data);
                     } else if (response.status === 401) {
                         console.error('Unauthorized access when fetching models');
+                        logout(); // Call logout function if unauthorized
                     }
                 } catch (error) {
                     console.error('Error fetching models:', error);
@@ -46,7 +51,7 @@ function App() {
         };
 
         fetchModels();
-    }, [user]);
+    }, [user, logout]); // Add logout to the dependency array
 
     if (isLoading) {
         return <Button disabled>
@@ -123,7 +128,19 @@ function App() {
                                 </>
                             )
                         } />
-                        <Route path="/login" element={!user ? <Login /> : <Navigate to="/" />} />
+                        <Route path="/login" element={
+                            !user ? (
+                                <Login 
+                                    setIsAuthenticated={(isAuthenticated: boolean, userData: User) => {
+                                        if (isAuthenticated) {
+                                            login(userData);
+                                        }
+                                    }} 
+                                />
+                            ) : (
+                                <Navigate to="/" />
+                            )
+                        } />
                         <Route path="/generate/:modelId" element={
                             user ? (
                                 <GenerateImage

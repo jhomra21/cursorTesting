@@ -17,7 +17,10 @@ import hmac
 import hashlib
 from flask_cors import CORS
 from models import db, Users, Models  # Import models
-from flask_jwt_extended import JWTManager, jwt_required, create_access_token, get_jwt_identity
+from flask_jwt_extended import JWTManager, jwt_required, create_access_token, get_jwt_identity, get_jwt
+import traceback
+from datetime import timedelta
+from replicate.exceptions import ReplicateError
 
 load_dotenv()
 
@@ -28,8 +31,15 @@ app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SESSION_COOKIE_SECURE'] = True  # For HTTPS
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'None'  # Required for cross-origin requests
+# Add this after your other configurations
+app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', os.urandom(32))
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)  # Set to 1 hour, adjust as needed
+app.config['JWT_TOKEN_LOCATION'] = ['headers']
+jwt = JWTManager(app)
 Session(app)
 WEBHOOK_SECRET = "whsec_V1ch24sYuN1xO2SqW4jX2EP8/NyCOASA"
+
+
 # Configure SQLAlchemy
 db_connection = os.getenv("POSTGRES_DB")
 app.config['SQLALCHEMY_DATABASE_URI'] = db_connection
@@ -44,6 +54,7 @@ celery.conf.update(app.config)
 
 # Get the Replicate API token from the environment variables
 replicate_api_token = os.getenv("REPLICATE_API_TOKEN")
+
 hf_token = os.getenv("HF_TOKEN")
 
 # lemon squeezy
@@ -202,12 +213,12 @@ def training_processing(training_id):
         if training.status == 'failed':
             session.pop('trainings', None)
             session.modified = True
-            flash(f'Training failed for model: {training.id}', 'error')
+            print(f'Training failed for model: {training.id}', 'error')
             return jsonify({"training_id": training.id, "status": training.status, "elapsed_time": elapsed_str})
         elif training.status == 'canceled':
             session.pop('trainings', None)
             session.modified = True
-            flash(f'Training canceled for model: {training.id}', 'warning')
+            print(f'Training canceled for model: {training.id}', 'warning')
             return jsonify({"training_id": training.id, "status": training.status, "elapsed_time": elapsed_str})
         
         elif training.status == 'succeeded':
@@ -241,43 +252,37 @@ def training_processing(training_id):
     except Exception as e:
         return jsonify({"error": str(e), "training_id": training_id}), 400
 
-@celery.task
-def async_train(model_id, training_input):
-    training = replicate.trainings.create(**training_input)
-    return {
-        'id': training.id,
-        'status': training.status,
-        'created_at': training.created_at if training.created_at else None,
-        'completed_at': training.completed_at if training.completed_at else None,
-        'error': str(training.error) if training.error else None,
-        'input': training.input,
-        'output': training.output,
-        'logs': training.logs,
+def check_model_permission(version_id):
+    try:
+        model = replicate.models.get("ostris/flux-dev-lora-trainer")
+        version = model.versions.get(version_id)
+        return True
+    except ReplicateError as e:
+        app.logger.error(f"Error checking model permission: {str(e)}")
+        return False
 
-        'urls': {
-            'get': training.urls['get'],
-            'cancel': training.urls['cancel']
-        } if training.urls else None
-    }
+@app.route('/create-training', methods=['POST', 'OPTIONS'])
+@jwt_required()
+def create_training():
+    if request.method == 'OPTIONS':
+        return '', 200
+    
+    try:
+        current_user_id = get_jwt_identity()
+        if not current_user_id:
+            return jsonify({"error": "User not authenticated"}), 401
 
-@app.route('/upload', methods=['GET', 'POST'])
-@login_required
-def upload_images():
-    user_id = session.get('user_id')
-    if request.method == 'POST':
-        if 'files[]' not in request.files:
-            flash('No file part', 'error')
-            return redirect(request.url)
-        files = request.files.getlist('files[]')
+        if 'inputImages' not in request.files:
+            return jsonify({"error": "No file part"}), 400
+        
+        files = request.files.getlist('inputImages')
         
         if not files or files[0].filename == '':
-            flash('No selected files', 'error')
-            return redirect(request.url)
+            return jsonify({"error": "No selected files"}), 400
         
-        trigger_word = request.form.get('trigger_word')
+        trigger_word = request.form.get('triggerWord')
         if not trigger_word:
-            flash('Trigger word is required', 'error')
-            return redirect(request.url)
+            return jsonify({"error": "Trigger word is required"}), 400
         
         # Create a zip file in memory
         zip_buffer = io.BytesIO()
@@ -293,50 +298,93 @@ def upload_images():
         zip_base64 = base64.b64encode(zip_buffer.getvalue()).decode('utf-8')
         zip_uri = f"data:application/zip;base64,{zip_base64}"
 
-        try:
-            # Create a new model on Replicate
-            new_model = replicate.models.create(
-                owner="juanmartbulnes",
-                name=f"{trigger_word}-lora-" + datetime.now().strftime("%Y%m%d-%H%M%S"),
-                visibility="private",
-                hardware="gpu-a100-large"
-            )
-            # Create the training using Replicate API
-            training_input = {
-                "destination": f"juanmartbulnes/{new_model.name}",
-                "version": "ostris/flux-dev-lora-trainer:d995297071a44dcb72244e6c19462111649ec86a9646c32df56daa7f14801944",
-                "input": {
-                    "steps": 800,
-                    "lora_rank": 16,
-                    "optimizer": "adamw8bit",
-                    "batch_size": 1,
-                    "resolution": "512,768,1024",
-                    "autocaption": False,
-                    "input_images": zip_uri,
-                    "trigger_word": trigger_word,
-                    "learning_rate": 0.0004,
-                },
-                # 'webhook': url_for('webhook', _external=True)
-            }
+        # Create a new model on Replicate
+        new_model = replicate.models.create(
+            owner="jhomra21",
+            name=f"{trigger_word}-lora-" + datetime.now().strftime("%Y%m%d-%H%M%S"),
+            visibility="private",
+            hardware="gpu-a100-large"
+        )
 
-            task = async_train.delay(new_model.id, training_input)
+        # Create the training input
+        training_input = {
+            "version": "ostris/flux-dev-lora-trainer:885394e6a31c6f349dd4f9e6e7ffbabd8d9840ab2559ab78aed6b2451ab2cfef",
+            "input": {
+                "steps": int(request.form.get('steps', 800)),
+                "lora_rank": 16,
+                "optimizer": "adamw8bit",
+                "batch_size": 1,
+                "resolution": "512,768,1024",
+                "autocaption": False,
+                "input_images": zip_uri,
+                "trigger_word": trigger_word,
+                "learning_rate": 0.0004,
+            },
+            "destination": f"jhomra21/{new_model.name}"
+        }
 
-            # add training to session
-            user_id = session.get('user_id')
-            new_training = Models.insert_model(user_id=user_id, name=new_model.name, description='', model_version='', status="succeeded")
-            #return json with training info and add to session
-            return jsonify({
-                "task_id": task.id,
-                "model_id": new_model.id,
-                "model_name": new_model.name,
-                "status": "pending",
-            }), 202
+        # Log the training input for debugging
+        # app.logger.info(f"Training input: {training_input}")
 
-        except Exception as e:
-            flash(f'Error creating model or starting training: {str(e)}', 'error')
-            return jsonify({"status": "error", "message": str(e)})
-    
-    return render_template('upload.html')
+        # Check model permission
+        if not check_model_permission(training_input["version"].split(":")[-1]):
+            return jsonify({"error": "No permission to use this model version"}), 403
+
+        # Start the async task
+        task = async_train.delay(new_model.id, training_input)
+
+        # Store the training information in the database
+        Models.insert_model(
+            user_id=current_user_id,
+            name=new_model.name,
+            description=f"Training for {trigger_word}",
+            model_version='',  # This will be updated when training is complete
+            status="pending"
+        )
+
+        return jsonify({
+            "message": "Task started...",
+            "task_id": task.id,
+            "model_name": new_model.name
+        }), 202
+
+    except Exception as e:
+        app.logger.error(f"Error in create_training: {str(e)}")
+        app.logger.error(traceback.format_exc())
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+@celery.task
+def async_train(model_id, training_input):
+    try:
+        # Print out the training input for debugging
+        # app.logger.info(f"Training input: {training_input}")
+
+        training = replicate.trainings.create(
+            version=training_input["version"],
+            input=training_input["input"],
+            destination=training_input["destination"]
+        )
+        app.logger.info(f"Training created: {training}")
+        return {
+            'id': training.id,
+            'status': training.status,
+            'created_at': training.created_at,
+            'completed_at': training.completed_at,
+            'error': str(training.error) if training.error else None,
+            'input': training.input,
+            'output': training.output,
+            'logs': training.logs,
+            'urls': training.urls
+        }
+    except ReplicateError as e:
+        app.logger.error(f"Replicate Error: {str(e)}")
+        return {'error': str(e)}
+    except Exception as e:
+        # remove model from db using model_id
+        Models.query.filter_by(id=model_id).delete()
+        db.session.commit()
+        app.logger.error(f"Unexpected error in async_train: {str(e)}")
+        return {'error': f"Unexpected error: {str(e)}"}
 
 @app.route('/training_status/<task_id>')
 @login_required
@@ -373,13 +421,10 @@ def all_users():
     user_id = session.get('user_id')
     return render_template('allusers.html', users=users, is_logged_in=is_logged_in, user_id=user_id)
 
-# Add this after your other configurations
-app.config['JWT_SECRET_KEY'] = 'your-secret-key'  # Change this to a secure random key
-app.config['JWT_TOKEN_LOCATION'] = ['headers']
-jwt = JWTManager(app)
+
 
 # Add this new route for token verification
-@app.route('/api/verify-token', methods=['GET', 'OPTIONS'])
+@app.route('/verify-token', methods=['GET', 'OPTIONS'])
 def verify_token():
     if request.method == 'OPTIONS':
         return '', 200
@@ -543,7 +588,7 @@ def create_checkout():
         return jsonify({'error': 'Failed to create checkout'}), 400
     
 
-@app.route('/api/data', methods=['GET', 'OPTIONS'])
+@app.route('/data', methods=['GET', 'OPTIONS'])
 @jwt_required()
 def get_data():
     if request.method == 'OPTIONS':
@@ -592,7 +637,23 @@ def handle_exception(e):
     # Return JSON instead of HTML for HTTP errors
     return jsonify({"error": "An unexpected error occurred"}), 500
 
+@app.route('/debug-token', methods=['GET'])
+@jwt_required()
+def debug_token():
+    current_token = get_jwt()
+    return jsonify(current_token), 200
 
+@app.route('/validate-token', methods=['GET'])
+@jwt_required()
+def validate_token():
+    current_user_id = get_jwt_identity()
+    user = Users.query.get(current_user_id)
+    if user:
+        return jsonify({
+            "id": user.id,
+            "username": user.username
+        }), 200
+    return jsonify({"error": "Invalid token"}), 401
 
 if __name__ == "__main__":
     with app.app_context():
