@@ -8,8 +8,8 @@ This is a Flask application that lets users create accounts, log in, upload imag
 * Auth
 ### Train a model (upload your images, can be faces, styles, products, etc...) 😏
 * Generate image from ^ trained model
-
-## Recent Updates
+>[!NOTE]
+>## Recent Updates
 
 ### Supabase Integration
 
@@ -32,7 +32,7 @@ To set up the Supabase integration:
    REACT_APP_SUPABASE_ANON_KEY=your_supabase_anon_key
    ```
 
-3. Replace `your_supabase_url` and `your_supabase_anon_key` with your actual Supabase project credentials.
+>3. Replace `your_supabase_url` and `your_supabase_anon_key` with your actual Supabase project credentials.
 
 >[!WARNING]
 > Make sure to never commit your `.env` file.
