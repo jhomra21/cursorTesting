@@ -43,7 +43,7 @@ To set up the project locally, follow these steps:
 
    ```bash
    cd frontend
-   npm install
+   bun install
    ```
 
 4. **Backend Setup**:
@@ -66,7 +66,7 @@ To set up the project locally, follow these steps:
    - Start the React frontend:
 
    ```bash
-   npm run dev
+   bun run dev
    ```
 
 ## Usage
@@ -75,9 +75,6 @@ To set up the project locally, follow these steps:
 - Use the login or registration forms to create an account or log in.
 - Once logged in, you can manage your models and generate images based on your inputs.
 
-## Contributing
-
-Contributions are welcome! Please create a pull request for any enhancements or bug fixes.
 
 ## License
 
