@@ -7,6 +7,7 @@ import { Slider } from './ui/slider';
 import { DownloadIcon, ReloadIcon } from '@radix-ui/react-icons';
 import { Link } from 'react-router-dom';
 
+
 export default function CreateTraining() {
     return (
         <div className="flex flex-col items-center justify-center h-screen">

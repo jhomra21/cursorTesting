@@ -16,6 +16,7 @@ import {
     CardTitle,
 } from "@/components/ui/card"
 import CreateTraining from './components/CreateTraining';
+import { AnimatedGroup } from './components/core/animatedGroup';
 
 function App() {
     const { user, logout, isLoading } = useAuth();
@@ -84,7 +85,9 @@ function App() {
                                             Modules are loading...
                                         </Button>
                                     ) : models.length > 0 ? (
-                                        <Card className="space-y-4 m-2 p-4">
+                                        <Card className="m-2">
+                                        <AnimatedGroup preset="scale" className="space-y-4 m-4 grid grid-flow-row grid-cols-1">
+
 
                                             {models.map(model => (
                                                 <Card key={model.id} className="bg-white shadow rounded p-4">
@@ -109,6 +112,7 @@ function App() {
                                                 </Card>
                                             ))}
 
+                                        </AnimatedGroup>
                                         </Card>
                                     ) : (
                                         <Button disabled>
