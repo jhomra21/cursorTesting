@@ -13,6 +13,7 @@ This branch adds a React frontend to the existing Flask application, enhancing t
 
 - **Responsive Design**:
   - Built with Tailwind CSS for a responsive and visually appealing layout.
+  - shadCN for styling
 
 - **Routing**:
   - Utilizes React Router for seamless navigation between different components, including login, registration, and model management pages.
