@@ -17,9 +17,6 @@ This branch adds a React frontend to the existing Flask application, enhancing t
 - **Routing**:
   - Utilizes React Router for seamless navigation between different components, including login, registration, and model management pages.
 
-## Installation
-
-
 ## License
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
