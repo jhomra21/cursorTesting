@@ -1,10 +1,12 @@
 import React, { createContext, useState, useEffect } from 'react';
 import { User } from '../types';
+import { supabase } from '../supabaseClient';
+import { Session } from '@supabase/supabase-js';
 
 interface AuthContextType {
   user: User | null;
-  login: (userData: User) => void;
-  logout: () => void;
+  login: (email: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
   isLoading: boolean;
 }
 
@@ -15,39 +17,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const validateToken = async () => {
-      const token = localStorage.getItem('access_token');
-      if (token) {
-        try {
-          const response = await fetch('http://localhost:5000/validate-token', {
-            method: 'GET',
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          });
-          if (response.ok) {
-            const userData = await response.json();
-            setUser(userData);
-          } else {
-            // Token is invalid, remove it
-            localStorage.removeItem('access_token');
-          }
-        } catch (error) {
-          console.error('Error validating token:', error);
-        }
-      }
+    const fetchSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      setUser(session ? mapUser(session.user) : null);
       setIsLoading(false);
     };
 
-    validateToken();
+    fetchSession();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session ? mapUser(session.user) : null);
+      setIsLoading(false);
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
-  const login = (userData: User) => {
-    setUser(userData);
+  const mapUser = (supabaseUser: any): User => ({
+    id: supabaseUser.id,
+    email: supabaseUser.email || '',
+    // Map any other properties you need
+  });
+
+  const login = async (email: string, password: string) => {
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    if (data.user) {
+      setUser(mapUser(data.user));
+    }
   };
 
-  const logout = () => {
-    localStorage.removeItem('access_token');
+  const logout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
     setUser(null);
   };
 

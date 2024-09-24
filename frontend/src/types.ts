@@ -1,15 +1,16 @@
 export interface User {
-    id: number;
-    username: string;
+    id: string;
+    email: string;
+    // Add any other properties you need
 }
 
 export interface Model {
-    id: number;
-    user_id: number;
-    name: string;
-    description: string;
-    created_at: string;
-    updated_at: string;
-    model_version: string;
-    status: string;
+    id: bigint;
+    user_id: string | null; // UUID is represented as a string in TypeScript
+    name: string | null;
+    description: string | null;
+    created_at: string | null; // Assuming you want to work with ISO date strings
+    updated_at: string | null; // Assuming you want to work with ISO date strings
+    model_version: string | null;
+    status: string | null;
 }

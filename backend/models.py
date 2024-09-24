@@ -2,8 +2,18 @@ from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.sql import func
 from flask import flash, redirect, url_for
+from supabase import create_client, Client
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 db = SQLAlchemy()
+
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+assert SUPABASE_URL is not None and SUPABASE_KEY is not None, "Supabase credentials are missing"
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 class Users(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -100,3 +110,29 @@ class Models(db.Model):
     
     def __repr__(self):
         return f'<Model {self.name}>'
+
+class SupabaseModels:
+    @staticmethod
+    def insert_model(user_id, name, description, model_version, status):
+        data = {
+            "user_id": user_id,
+            "name": name,
+            "description": description,
+            "model_version": model_version,
+            "status": status
+        }
+        return supabase.table("models").insert(data).execute()
+    @staticmethod
+    def get_model_by_id(model_id):
+        return supabase.table('models').select('*').eq('id', model_id).single().execute()
+
+    @staticmethod
+    def get_models_by_user_id(user_id):
+        return supabase.table("models").select("*").eq("user_id", user_id).execute()
+    
+    @staticmethod
+    def delete_model_by_id(model_id):
+        return supabase.table('models').delete().eq('id', model_id).execute()
+    
+
+    # Add other methods as needed

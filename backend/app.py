@@ -16,13 +16,14 @@ from celery import Celery
 import hmac
 import hashlib
 from flask_cors import CORS
-from models import db, Users, Models  # Import models
+from models import SupabaseModels  # Import the new SupabaseModels class
 from flask_jwt_extended import JWTManager, jwt_required, create_access_token, get_jwt_identity, get_jwt
 import traceback
 from datetime import timedelta
 from replicate.exceptions import ReplicateError
+from supabase import create_client, Client
 
-load_dotenv()
+load_dotenv()  # Make sure this is called at the beginning of your script
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "http://localhost:5173"}}, supports_credentials=True, allow_headers=["Content-Type", "Authorization"])
@@ -39,12 +40,16 @@ jwt = JWTManager(app)
 Session(app)
 WEBHOOK_SECRET = "whsec_V1ch24sYuN1xO2SqW4jX2EP8/NyCOASA"
 
+# Supabase configuration
+SUPABASE_URL = os.getenv("SUPABASE_URL") or ""
+SUPABASE_KEY = os.getenv("SUPABASE_KEY") or ""
 
-# Configure SQLAlchemy
-db_connection = os.getenv("POSTGRES_DB")
-app.config['SQLALCHEMY_DATABASE_URI'] = db_connection
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-db.init_app(app)  # Initialize SQLAlchemy with the app
+if not SUPABASE_URL or not SUPABASE_KEY:
+    raise ValueError("Supabase credentials are missing. Please check your .env file.")
+
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
+
+# Instead, we'll use Supabase for database operations
 
 # Configure Celery
 app.config['CELERY_BROKER_URL'] = 'redis://172.20.116.49:6379/0'
@@ -133,7 +138,7 @@ def index():
 
 # main route
 @app.route("/generate", methods=["POST"])
-@login_required
+@jwt_required()
 def generate_image():
     if not request.is_json:
         return jsonify({"error": "Request must be JSON"}), 400
@@ -149,11 +154,12 @@ def generate_image():
         return jsonify({"error": "Prompt and modelId are required"}), 400
 
     try:
-        model = db.session.get(Models, model_id)
-        if not model:
+        model_response = SupabaseModels.get_model_by_id(model_id)
+        if not model_response.data:
             return jsonify({"error": "Model not found"}), 404
 
-        version = replicate.models.get(model.name).versions.get(model.model_version)
+        model = model_response.data
+        version = replicate.models.get(model['name']).versions.get(model['model_version'])
 
         output = replicate.run(
             version,
@@ -177,7 +183,7 @@ def generate_image():
 
         return jsonify({
             "image_url": image_url,
-            "predict_time": None,  # We're not fetching these metrics anymore
+            "predict_time": None,
             "total_time": None,
             "guidance_scale": guidance_scale,
             "num_inference_steps": num_inference_steps,
@@ -193,7 +199,7 @@ def get_latest_trigger_word():
     return TRIGGER_WORD
 
 @app.route('/training_processing/<training_id>')
-@login_required
+@jwt_required()
 def training_processing(training_id):
     try:
         training = replicate.trainings.get(training_id)
@@ -211,18 +217,14 @@ def training_processing(training_id):
             elapsed_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
         
         if training.status == 'failed':
-            session.pop('trainings', None)
-            session.modified = True
             print(f'Training failed for model: {training.id}', 'error')
             return jsonify({"training_id": training.id, "status": training.status, "elapsed_time": elapsed_str})
         elif training.status == 'canceled':
-            session.pop('trainings', None)
-            session.modified = True
             print(f'Training canceled for model: {training.id}', 'warning')
             return jsonify({"training_id": training.id, "status": training.status, "elapsed_time": elapsed_str})
         
         elif training.status == 'succeeded':
-            user_id = session.get('user_id')
+            current_user_id = get_jwt_identity()
             if training.output and 'version' in training.output:
                 version = training.output['version']
                 print("version:", version)
@@ -230,12 +232,9 @@ def training_processing(training_id):
             latest_version = model.latest_version
             if latest_version:
                 print("latest_version:", latest_version)
-                Models.insert_model(user_id=user_id, name=model.id, description='', model_version=latest_version.id, status="succeeded")
-           
+                SupabaseModels.insert_model(user_id=current_user_id, name=model.id, description='', model_version=latest_version.id, status="succeeded")
             else:
                 print("No version available for the model")
-            session.pop('trainings', None)
-            session.modified = True
             flash(f'Training finished successfully! Model: {training.id}', 'success')
             return jsonify({
                 "id": training.id,
@@ -334,7 +333,7 @@ def create_training():
         task = async_train.delay(new_model.id, training_input)
 
         # Store the training information in the database
-        Models.insert_model(
+        SupabaseModels.insert_model(
             user_id=current_user_id,
             name=new_model.name,
             description=f"Training for {trigger_word}",
@@ -381,13 +380,12 @@ def async_train(model_id, training_input):
         return {'error': str(e)}
     except Exception as e:
         # remove model from db using model_id
-        Models.query.filter_by(id=model_id).delete()
-        db.session.commit()
+        SupabaseModels.delete_model_by_id(model_id)
         app.logger.error(f"Unexpected error in async_train: {str(e)}")
         return {'error': f"Unexpected error: {str(e)}"}
 
 @app.route('/training_status/<task_id>')
-@login_required
+@jwt_required()
 def check_training_status(task_id):
     task = async_train.AsyncResult(task_id)
     if task.state == 'PENDING':
@@ -414,12 +412,19 @@ def check_training_status(task_id):
 
 # -------- user stuff --------
 @app.route('/allusers')
-@login_required
+@jwt_required()
 def all_users():
-    users = Users.query.all()
-    is_logged_in = 'user_id' in session
-    user_id = session.get('user_id')
-    return render_template('allusers.html', users=users, is_logged_in=is_logged_in, user_id=user_id)
+    try:
+        response = supabase.table('users').select('*').execute()
+        users = response.data
+        current_user_id = get_jwt_identity()
+        return jsonify({
+            'users': users,
+            'is_logged_in': True,
+            'user_id': current_user_id
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 
@@ -432,13 +437,17 @@ def verify_token():
     @jwt_required()
     def get():
         current_user_id = get_jwt_identity()
-        user = Users.query.get(current_user_id)
-        if user:
-            return jsonify({
-                "id": user.id,
-                "username": user.username,
-            }), 200
-        return jsonify({"msg": "User not found"}), 404
+        try:
+            response = supabase.table('users').select('id', 'username').eq('id', current_user_id).single().execute()
+            user = response.data
+            if user:
+                return jsonify({
+                    "id": user['id'],
+                    "username": user['username'],
+                }), 200
+            return jsonify({"msg": "User not found"}), 404
+        except Exception as e:
+            return jsonify({"error": str(e)}), 500
     
     return get()
 
@@ -447,59 +456,77 @@ def verify_token():
 def login():
     if request.method == 'OPTIONS':
         return '', 200
+    
     if not request.is_json:
         return jsonify({"error": "Request must be JSON"}), 400
 
     data = request.get_json()
-    username = data.get("username")
-    password = data.get("password")
+    email = data.get('email')
+    password = data.get('password')
 
-    user = Users.get_user_by_username(username)
-    if user and user.password_hash and user.check_password(password):
-        access_token = create_access_token(identity=user.id)
-        models = user.get_models()
-        serialized_models = [
-            {
-                'id': model.id,
-                'name': model.name,
-                'model_version': model.model_version,
-                'status': model.status
-            } for model in models
-        ]
+    if not email or not password:
+        return jsonify({"error": "Email and password are required"}), 400
+
+    try:
+        # Attempt to sign in with Supabase
+        response = supabase.auth.sign_in_with_password({"email": email, "password": password})
         
-        return jsonify({
-            "message": "Logged in successfully",
-            "user_id": user.id,
-            "username": user.username,
-            "models": serialized_models,
-            "access_token": access_token
-        })
-    else:
-        return jsonify({"error": "Invalid username or password"}), 401
+        # Check if the sign-in was successful
+        if response.user and response.session:
+            user = response.user
+            session = response.session
 
-@app.route('/signup', methods=['GET', 'POST'])
+            # Create a JWT token
+            access_token = create_access_token(identity=str(user.id))
+
+            return jsonify({
+                "message": "Logged in successfully",
+                "user_id": user.id,
+                "email": user.email,
+                "access_token": access_token
+            }), 200
+        else:
+            return jsonify({"error": "Invalid credentials"}), 401
+    except Exception as e:
+        app.logger.error(f"Login error: {str(e)}")
+        return jsonify({"error": "An error occurred during login"}), 500
+
+@app.route('/signup', methods=['POST'])
 def signup():
-    if request.method == 'POST':
-        username = request.form['username']
-        email = request.form['email']
-        password = request.form['password']
-        
-        if len(password) < 8:
-            flash('Password must be at least 8 characters long.', 'error')
-            return redirect(url_for('signup'))
-        
-        existing_user = Users.get_user_by_email(email)
-        if existing_user:
-            flash('Email already registered.', 'error')
-            return redirect(url_for('signup'))
-        
-        # Create new user
-        new_user = Users.create_user(username=username, email=email, password=password)
-        if new_user:
-            flash('Account created successfully. Please log in.', 'success')
-            return redirect(url_for('login'))
+    if not request.is_json:
+        return jsonify({"error": "Request must be JSON"}), 400
+
+    data = request.get_json()
+    username = data.get('username')
+    email = data.get('email')
+    password = data.get('password')
     
-    return render_template('signup.html')
+    if len(password) < 8:
+        return jsonify({'error': 'Password must be at least 8 characters long.'}), 400
+    
+    try:
+        # Check if user already exists
+        existing_user = supabase.table('users').select('*').eq('email', email).execute()
+        if existing_user.data:
+            return jsonify({'error': 'Email already registered.'}), 400
+
+        # Create new user
+        user = supabase.auth.sign_up({
+            "email": email,
+            "password": password,
+            "options": {
+                "data": {
+                    "username": username
+                }
+            }
+        })
+        
+        if user:
+            return jsonify({'message': 'Account created successfully. Please log in.'}), 201
+        else:
+            return jsonify({'error': 'Failed to create account.'}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # lemon squeezy sample product
 def get_variant_id(product_id):
@@ -528,14 +555,14 @@ def get_variant_id(product_id):
     return None
 
 @app.route('/buy-sample')
-@login_required
+@jwt_required()
 def buy_sample():
     return render_template('buy_sample.html', 
                            store_id=LEMON_SQUEEZY_STORE_ID, 
                            product_id=SAMPLE_PRODUCT_ID)
 
 @app.route('/create-checkout', methods=['POST'])
-@login_required
+@jwt_required()
 def create_checkout():
     headers = {
         'Accept': 'application/vnd.api+json',
@@ -593,26 +620,30 @@ def create_checkout():
 def get_data():
     if request.method == 'OPTIONS':
         return '', 200
-    current_user_id = get_jwt_identity()
-    user = Users.get_user_by_id(current_user_id)
-    if not user:
-        return jsonify({"error": "User not found"}), 404
     
-    models = Models.query.filter_by(user_id=current_user_id).all()
-    models_data = [
-        {
-            'id': model.id,
-            'user_id': model.user_id,
-            'name': model.name,
-            'description': model.description,
-            'created_at': str(model.created_at),
-            'updated_at': str(model.updated_at),
-            'model_version': model.model_version,
-            'status': model.status
-        }
-        for model in models
-    ]
-    return jsonify(models_data)
+    try:
+        # Get the user ID from the JWT token
+        current_user_id = get_jwt_identity()
+
+        # Fetch user data
+        user_response = supabase.table('users').select('*').eq('id', current_user_id).single().execute()
+        user_data = user_response.data
+
+        if not user_data:
+            return jsonify({"error": "User not found"}), 404
+        
+        # Fetch models data
+        models_response = supabase.table('models').select('*').eq('user_id', current_user_id).execute()
+        models_data = models_response.data
+
+        return jsonify({
+            "user": user_data,
+            "models": models_data
+        })
+
+    except Exception as e:
+        app.logger.error(f"Error in get_data: {str(e)}")
+        return jsonify({"error": "An error occurred while fetching data"}), 500
 
 @app.route('/logout', methods=['POST', 'OPTIONS'])
 @jwt_required()
@@ -643,20 +674,5 @@ def debug_token():
     current_token = get_jwt()
     return jsonify(current_token), 200
 
-@app.route('/validate-token', methods=['GET'])
-@jwt_required()
-def validate_token():
-    current_user_id = get_jwt_identity()
-    user = Users.query.get(current_user_id)
-    if user:
-        return jsonify({
-            "id": user.id,
-            "username": user.username
-        }), 200
-    return jsonify({"error": "Invalid token"}), 401
-
 if __name__ == "__main__":
-    with app.app_context():
-        db.create_all()
-      
     app.run(debug=True)

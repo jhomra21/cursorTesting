@@ -18,8 +18,8 @@ interface LoginProps {
     setIsAuthenticated: (isAuthenticated: boolean, userData: User) => void;
 }
 
-const Login: React.FC<LoginProps> = ({ setIsAuthenticated }) => {
-    const [username, setUsername] = useState('');
+const Login: React.FC = () => {
+    const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const navigate = useNavigate();
@@ -29,47 +29,11 @@ const Login: React.FC<LoginProps> = ({ setIsAuthenticated }) => {
         e.preventDefault();
         setError('');
         try {
-            const response = await fetch('http://localhost:5000/login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ username, password }),
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                localStorage.setItem('access_token', data.access_token);
-                login({ id: data.user_id, username: data.username }); // Use the login function from useAuth
-                navigate('/');
-            } else {
-                setError('Invalid username or password');
-            }
+            await login(email, password);
+            navigate('/');
         } catch (error) {
             console.error('Error during login:', error);
-            setError('An error occurred during login');
-        }
-    };
-
-    const handleLogin = async (username: string, password: string) => {
-        try {
-            const response = await fetch('http://localhost:5000/login', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ username, password }),
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            const data = await response.json();
-            localStorage.setItem('access_token', data.access_token);
-            // Handle successful login (e.g., redirect, update state, etc.)
-        } catch (error) {
-            console.error('Login error:', error);
+            setError('Invalid email or password');
         }
     };
 
@@ -83,16 +47,16 @@ const Login: React.FC<LoginProps> = ({ setIsAuthenticated }) => {
                 <CardContent>
                     <form onSubmit={handleSubmit} >
                         <div className="mb-4">
-                            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="username">
-                                Username
+                            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="email">
+                                Email
                             </label>
                             <Input
                                 className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                                id="username"
-                                type="text"
-                                placeholder="Username"
-                                value={username}
-                                onChange={(e) => setUsername(e.target.value)}
+                                id="email"
+                                type="email"
+                                placeholder="Email"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
                             />
                         </div>
                         <div className="mb-6">
@@ -108,10 +72,9 @@ const Login: React.FC<LoginProps> = ({ setIsAuthenticated }) => {
                                 onChange={(e) => setPassword(e.target.value)}
                             />
                         </div>
-                        
+                        {error && <p className="text-red-500 text-xs italic mb-4">{error}</p>}
                         <div className="flex justify-end">
                             <Button type="submit" variant="outline" className="hover:bg-gray-900 hover:text-white">Sign In</Button>
-
                         </div>
                     </form>
                 </CardContent>
