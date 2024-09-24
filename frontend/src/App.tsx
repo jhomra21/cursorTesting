@@ -86,7 +86,7 @@ function App() {
                                         </Button>
                                     ) : models.length > 0 ? (
                                         <Card className="m-2">
-                                        <AnimatedGroup preset="scale" className="space-y-4 m-4 grid grid-flow-row grid-cols-1">
+                                        <AnimatedGroup preset="blur-slide" className="space-y-4 m-4 grid grid-flow-row grid-cols-1">
 
 
                                             {models.map(model => (
