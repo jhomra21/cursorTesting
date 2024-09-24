@@ -45,6 +45,27 @@ This is a Flask application that lets users create accounts, log in, upload imag
   * Run the Flask application:
       python app.py
   * Make sure to start up docker
+
+
+## New Features ⬇
+
+- **User Authentication**: 
+  - Implemented login and registration functionality using JWT for secure user sessions.
+
+- **Model Management**:
+  - Users can create, view, and manage their models directly from the React frontend.
+  - Integration with Flask backend and Replicate API to train models using user-uploaded images.
+
+- **Responsive Design**:
+  - Built with Tailwind CSS for a responsive and visually appealing layout.
+  - shadCN for styling
+
+- **Routing**:
+  - Utilizes React Router for seamless navigation between different components, including login, registration, and model management pages.
+
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
     
 ## Notes
 
@@ -55,3 +76,4 @@ This is a Flask application that lets users create accounts, log in, upload imag
   If you encounter any issues, ensure all files are in the correct locations and that the Replicate API token is set   
   correctly in the .env file.
   For more details on the implementation, refer to the comments in the app.py file
+
