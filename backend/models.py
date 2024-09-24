@@ -32,6 +32,11 @@ class Users(db.Model):
         return self.models
     
     @classmethod
+    def get_user_by_id(cls, id):
+        user = cls.query.get(id)
+        return user if user else None
+    
+    @classmethod
     def get_user_by_email(cls, email):
         user = cls.query.filter_by(email=email).first()
         return user if user else None

@@ -90,7 +90,7 @@ def get_recent_predictions():
     return [
         {
             "url": pred.output[0] if pred.output and isinstance(pred.output, list) else None,
-            "prompt": pred.input.get("prompt", "No prompt available"),
+            "prompt": pred.input.get("prompt", "No prompt available") if pred.input else "No prompt available",
             "status": pred.status
         }
         for pred in predictions
@@ -594,7 +594,7 @@ def get_data():
     if request.method == 'OPTIONS':
         return '', 200
     current_user_id = get_jwt_identity()
-    user = Users.query.get(current_user_id)
+    user = Users.get_user_by_id(current_user_id)
     if not user:
         return jsonify({"error": "User not found"}), 404
     

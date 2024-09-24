@@ -75,8 +75,8 @@ export default function CreateTraining() {
       const responseData = await response.json();
       console.log(responseData);
       toast({
-        title: "Training created",
-        description: "Your training has been successfully created.",
+        title: "Training started...",
+        description: "Your training has been successfully started.",
       })
       // Handle successful response (e.g., redirect or update UI)
     } catch (error) {
