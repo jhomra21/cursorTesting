@@ -59,7 +59,8 @@ function App() {
         <Router>
             <div className="App">
                 <header className="App-header">
-                    <h1 className="text-3xl font-bold mb-4">Flask and React Integration</h1>
+                    <h1 className="flex justify-center text-3xl font-bold mb-4">Flask-Replicate Image Generation</h1>
+                    <h2 className="flex justify-center text-xl mb-4">Generate images with AI</h2>
                     <Routes>
                         <Route path="/" element={
                             !user ? (
