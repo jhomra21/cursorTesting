@@ -8,6 +8,7 @@ import CreateTraining from './components/CreateTraining';
 import { Toaster } from './components/ui/toaster';
 import { User } from './types';
 import GenerateImage from './components/GenerateImage';
+import Pennies from './components/Pennies';
 
 const App: React.FC = () => {
     return (
@@ -62,6 +63,9 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                                         <Link to="/create-training" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
                                             Create Training
                                         </Link>
+                                        <Link to="/pennies" className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
+                                            Pennies
+                                        </Link>
                                     </>
                                 )}
                             </div>
@@ -105,6 +109,9 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
                                     </Link>
                                     <Link to="/create-training" className="block pl-3 pr-4 py-2 border-l-4 text-base font-medium border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800">
                                         Create Training
+                                    </Link>
+                                    <Link to="/pennies" className="block pl-3 pr-4 py-2 border-l-4 text-base font-medium border-transparent text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:text-gray-800">
+                                        Pennies
                                     </Link>
                                 </>
                             )}
@@ -161,6 +168,11 @@ const AppContent: React.FC = () => {
             <Route 
                 path="/generate/:modelId" 
                 element={auth.user ? <GenerateImage user={auth.user} onLogout={auth.logout} /> : <Navigate to="/login" />}
+            />
+            {/* Add the new Pennies route */}
+            <Route 
+                path="/pennies" 
+                element={auth.user ? <Pennies /> : <Navigate to="/login" />}
             />
             {/* Add any other routes here */}
         </Routes>

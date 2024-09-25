@@ -580,16 +580,13 @@ def get_variant_id(product_id):
         print(f"Error in get_variant_id: {str(e)}")
     return None
 
-@app.route('/buy-sample')
-@jwt_required()
-def buy_sample():
-    return render_template('buy_sample.html', 
-                           store_id=LEMON_SQUEEZY_STORE_ID, 
-                           product_id=SAMPLE_PRODUCT_ID)
 
-@app.route('/create-checkout', methods=['POST'])
+@app.route('/create-checkout', methods=['POST', 'OPTIONS'])
 @jwt_required()
 def create_checkout():
+    if request.method == 'OPTIONS':
+        return '', 200
+    
     headers = {
         'Accept': 'application/vnd.api+json',
         'Content-Type': 'application/vnd.api+json',
