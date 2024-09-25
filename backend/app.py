@@ -202,54 +202,99 @@ def get_latest_trigger_word():
 @jwt_required()
 def training_processing(training_id):
     try:
+        current_user_id = get_jwt_identity()
         training = replicate.trainings.get(training_id)
+        
         if training is None:
             return jsonify({"error": "Training not found"}), 404
-        elapsed_str = "00:00:00"
-        # Calculate elapsed time
-        start_time = datetime.fromisoformat(training.created_at.replace('Z', '+00:00')) if training.created_at else None
-        if start_time:
-            current_time = datetime.now(timezone.utc)
-            elapsed_time = current_time - start_time
-            # Convert to hours, minutes, seconds
-            hours, remainder = divmod(int(elapsed_time.total_seconds()), 3600)
-            minutes, seconds = divmod(remainder, 60)
-            elapsed_str = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+        elapsed_time = calculate_elapsed_time(training.created_at)
         
-        if training.status == 'failed':
-            print(f'Training failed for model: {training.id}', 'error')
-            return jsonify({"training_id": training.id, "status": training.status, "elapsed_time": elapsed_str})
-        elif training.status == 'canceled':
-            print(f'Training canceled for model: {training.id}', 'warning')
-            return jsonify({"training_id": training.id, "status": training.status, "elapsed_time": elapsed_str})
+        status = training.status
+        response_data = {
+            "training_id": training.id,
+            "status": status,
+            "elapsed_time": elapsed_time
+        }
+
+        if status in ['failed', 'canceled']:
+            log_training_status(training.id, status)
+            try:
+                # Safely access trigger_word and handle potential None values
+                trigger_word = training.input.get('trigger_word', '') if training.input else ''
+                created_at = training.created_at
+                
+                # Construct the model name
+                if isinstance(created_at, str):
+                    model_name = f"{trigger_word}-lora-{created_at}"
+                elif created_at:
+                    model_name = f"{trigger_word}-lora-{created_at.strftime('%Y%m%d-%H%M%S')}"
+                else:
+                    model_name = f"{trigger_word}-lora-unknown"
+
+                response = supabase.table('models').update({
+                    'status': status
+                }).eq('name', model_name).execute()
+                
+                if not response.data:
+                    log_error(f"Failed to update model status in Supabase for training: {training.id}")
+            except Exception as e:
+                log_error(f"Error updating model status in Supabase: {str(e)}")
+            return jsonify(response_data)
         
-        elif training.status == 'succeeded':
-            current_user_id = get_jwt_identity()
+        elif status == 'succeeded':
             if training.output and 'version' in training.output:
                 version = training.output['version']
-                print("version:", version)
-            model = replicate.models.get(version)
-            latest_version = model.latest_version
-            if latest_version:
-                print("latest_version:", latest_version)
-                SupabaseModels.insert_model(user_id=current_user_id, name=model.id, description='', model_version=latest_version.id, status="succeeded")
+                model = replicate.models.get(version)
+                latest_version = model.latest_version
+                
+                if latest_version:
+                    update_model_in_supabase(current_user_id, model.id, latest_version.id, status)
+                    response_data["model_id"] = model.id
+                    response_data["model_version"] = latest_version.id
+                else:
+                    log_training_status(training.id, "No version available")
             else:
-                print("No version available for the model")
-            flash(f'Training finished successfully! Model: {training.id}', 'success')
-            return jsonify({
-                "id": training.id,
-                "status": 'succeeded'
-            }),200
+                log_training_status(training.id, "No output or version in training")
+            
+            return jsonify(response_data), 200
+        
         else:
-            return jsonify({
-                "id": training.id,
-                "status": training.status,
-                "elapsed_time": elapsed_str,
-                "created_at": training.created_at or None,
-                "cancel_url": getattr(training.urls, 'cancel', None) if training.status in ['starting', 'processing'] else None
-            })
+            response_data["created_at"] = training.created_at if training.created_at else ""
+            cancel_url = getattr(training.urls, 'cancel', None) if status in ['starting', 'processing'] else None
+            response_data["cancel_url"] = str(cancel_url) if cancel_url is not None else ""
+            return jsonify(response_data)
+
     except Exception as e:
-        return jsonify({"error": str(e), "training_id": training_id}), 400
+        log_error(f"Error in training_processing: {str(e)}")
+        return jsonify({"error": str(e), "training_id": training_id}), 500
+
+def calculate_elapsed_time(created_at):
+    if not created_at:
+        return "00:00:00"
+    start_time = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+    elapsed_time = datetime.now(timezone.utc) - start_time
+    hours, remainder = divmod(int(elapsed_time.total_seconds()), 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+def update_model_in_supabase(user_id, model_name, model_version, status):
+    try:
+        response = supabase.table('models').update({
+            'model_version': model_version,
+            'status': status
+        }).eq('user_id', user_id).eq('name', model_name).execute()
+        
+        if not response.data:
+            log_error(f"Failed to update model in Supabase: {model_name}")
+    except Exception as e:
+        log_error(f"Error updating model in Supabase: {str(e)}")
+
+def log_training_status(training_id, status):
+    app.logger.info(f'Training {status} for model: {training_id}')
+
+def log_error(message):
+    app.logger.error(message)
 
 def check_model_permission(version_id):
     try:
