@@ -8,6 +8,34 @@ This is a Flask application that lets users create accounts, log in, upload imag
 * Auth
 ### Train a model (upload your images, can be faces, styles, products, etc...) 😏
 * Generate image from ^ trained model
+>[!NOTE]
+>## Recent Updates
+>
+>### Supabase Integration
+>
+>Recently integrated Supabase into the project. Here are the key changes:
+>
+>- Added Supabase client configuration in `frontend/src/supabaseClient.ts`
+>- Updated environment variables to include Supabase URL and anonymous key
+>- Integrated Supabase client in `frontend/src/App.tsx` for database operations
+>
+>To set up the Supabase integration:
+>
+>1. Install the Supabase client:
+>   ```
+>   bun add @supabase/supabase-js
+>   ```
+>
+>2. Add the following to your `.env` file:
+>   ```
+>   REACT_APP_SUPABASE_URL=your_supabase_url
+>   REACT_APP_SUPABASE_ANON_KEY=your_supabase_anon_key
+>   ```
+>
+>3. Replace `your_supabase_url` and `your_supabase_anon_key` with your actual Supabase project credentials.
+
+>[!WARNING]
+> Make sure to never commit your `.env` file.
 
 ### lemonSqueezy
 - initial setup, in test mode
@@ -46,12 +74,6 @@ This is a Flask application that lets users create accounts, log in, upload imag
       python app.py
   * Make sure to start up docker
 
-
-## New Features ⬇
-
-- **User Authentication**: 
-  - Implemented login and registration functionality using JWT for secure user sessions.
-
 - **Model Management**:
   - Users can create, view, and manage their models directly from the React frontend.
   - Integration with Flask backend and Replicate API to train models using user-uploaded images.
@@ -68,8 +90,9 @@ This is a Flask application that lets users create accounts, log in, upload imag
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
     
 ## Notes
-
- 🚫🚫 Keep your Replicate API token confidential and do not share it publicly! 🚫🚫
+>[!CAUTION]
+> Keep your Replicate API token confidential and do not share it publicly!
+ 
   
   The application uses Tailwind CSS for styling. Make sure to set it up correctly (read this guide: https://flowbite.com/docs/getting-started/flask/ or tailwind docs)
   
