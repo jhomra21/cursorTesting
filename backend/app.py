@@ -41,8 +41,8 @@ Session(app)
 WEBHOOK_SECRET = "whsec_V1ch24sYuN1xO2SqW4jX2EP8/NyCOASA"
 
 # Supabase configuration
-SUPABASE_URL = os.getenv("SUPABASE_URL") or ""
-SUPABASE_KEY = os.getenv("SUPABASE_KEY") or ""
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 
 if not SUPABASE_URL or not SUPABASE_KEY:
     raise ValueError("Supabase credentials are missing. Please check your .env file.")
@@ -668,9 +668,11 @@ def handle_exception(e):
     # Return JSON instead of HTML for HTTP errors
     return jsonify({"error": "An unexpected error occurred"}), 500
 
-@app.route('/debug-token', methods=['GET'])
+@app.route('/debug-token', methods=['GET', 'OPTIONS'])
 @jwt_required()
 def debug_token():
+    if request.method == 'OPTIONS':
+        return '', 200
     current_token = get_jwt()
     return jsonify(current_token), 200
 

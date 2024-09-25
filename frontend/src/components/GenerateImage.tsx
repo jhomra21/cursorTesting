@@ -8,7 +8,7 @@ import { DownloadIcon, ReloadIcon } from '@radix-ui/react-icons';
 import { AnimatedGroup } from './core/animatedGroup';
 
 interface GenerateImageProps {
-    user: User | null;
+    user: User; // Changed from User | null to User
     models: Model[];
     onLogout: () => void;
 }

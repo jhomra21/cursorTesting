@@ -1,7 +1,7 @@
 export interface User {
     id: string;
     email: string;
-    // Add any other properties you need
+    // Add any other properties that your User object has
 }
 
 export interface Model {

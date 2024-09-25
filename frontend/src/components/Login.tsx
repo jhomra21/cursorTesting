@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { User } from '../types';  // Make sure to import the User type
 import { useAuth } from '../hooks/useAuth';
@@ -23,14 +23,20 @@ const Login: React.FC = () => {
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const navigate = useNavigate();
-    const { login } = useAuth();
+    const { login, user } = useAuth();
+
+    useEffect(() => {
+        if (user) {
+            navigate('/');
+        }
+    }, [user, navigate]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
         try {
             await login(email, password);
-            navigate('/');
+            // No need to navigate here, the useEffect will handle it
         } catch (error) {
             console.error('Error during login:', error);
             setError('Invalid email or password');
