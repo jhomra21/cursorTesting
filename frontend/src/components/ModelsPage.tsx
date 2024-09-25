@@ -48,7 +48,7 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ user }) => {
                     </Button>
                 </AnimatedGroup>
             ) : models.length > 0 ? (
-                <Card className="m-2">
+                
                     <AnimatedGroup preset="blur-slide" className="space-y-4 m-4 grid grid-flow-row grid-cols-1">
                         {models.map(model => (
                             <Card key={model.id} className="bg-white shadow rounded p-4">
@@ -73,7 +73,7 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ user }) => {
                             </Card>
                         ))}
                     </AnimatedGroup>
-                </Card>
+                
             ) : (
                 <AnimatedGroup preset="blur" className="m-2 grid grid-flow-row grid-cols-1">
                     <Button disabled>
