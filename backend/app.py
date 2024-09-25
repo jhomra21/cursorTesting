@@ -274,25 +274,18 @@ def create_training():
         if 'inputImages' not in request.files:
             return jsonify({"error": "No file part"}), 400
         
-        files = request.files.getlist('inputImages')
+        zip_file = request.files['inputImages']
         
-        if not files or files[0].filename == '':
-            return jsonify({"error": "No selected files"}), 400
+        if not zip_file or zip_file.filename == '':
+            return jsonify({"error": "No selected file"}), 400
         
         trigger_word = request.form.get('triggerWord')
         if not trigger_word:
             return jsonify({"error": "Trigger word is required"}), 400
         
-        # Create a zip file in memory
-        zip_buffer = io.BytesIO()
-        with zipfile.ZipFile(zip_buffer, 'w') as zipf:
-            for file in files:
-                if file and file.filename and allowed_file(file.filename):
-                    filename = secure_filename(file.filename)
-                    zipf.writestr(filename, file.read())
+        # Read the zip file directly
+        zip_buffer = io.BytesIO(zip_file.read())
         
-        # Reset the buffer position to the beginning
-        zip_buffer.seek(0)
         # Convert zip_buffer to base64 and create a data URI
         zip_base64 = base64.b64encode(zip_buffer.getvalue()).decode('utf-8')
         zip_uri = f"data:application/zip;base64,{zip_base64}"
@@ -307,30 +300,27 @@ def create_training():
 
         # Create the training input
         training_input = {
-            "version": "ostris/flux-dev-lora-trainer:885394e6a31c6f349dd4f9e6e7ffbabd8d9840ab2559ab78aed6b2451ab2cfef",
-            "input": {
-                "steps": int(request.form.get('steps', 800)),
-                "lora_rank": 16,
-                "optimizer": "adamw8bit",
-                "batch_size": 1,
-                "resolution": "512,768,1024",
-                "autocaption": False,
-                "input_images": zip_uri,
-                "trigger_word": trigger_word,
-                "learning_rate": 0.0004,
-            },
-            "destination": f"jhomra21/{new_model.name}"
+            "steps": int(request.form.get('steps', 800)),
+            "lora_rank": 16,
+            "optimizer": "adamw8bit",
+            "batch_size": 1,
+            "resolution": "512,768,1024",
+            "autocaption": False,
+            "input_images": zip_uri,
+            "trigger_word": trigger_word,
+            "learning_rate": 0.0004,
         }
 
-        # Log the training input for debugging
-        # app.logger.info(f"Training input: {training_input}")
-
         # Check model permission
-        if not check_model_permission(training_input["version"].split(":")[-1]):
+        if not check_model_permission("885394e6a31c6f349dd4f9e6e7ffbabd8d9840ab2559ab78aed6b2451ab2cfef"):
             return jsonify({"error": "No permission to use this model version"}), 403
 
-        # Start the async task
-        task = async_train.delay(new_model.id, training_input)
+        # Start the training directly
+        training = replicate.trainings.create(
+            version="ostris/flux-dev-lora-trainer:885394e6a31c6f349dd4f9e6e7ffbabd8d9840ab2559ab78aed6b2451ab2cfef",
+            input=training_input,
+            destination=f"jhomra21/{new_model.name}"
+        )
 
         # Store the training information in the database
         SupabaseModels.insert_model(
@@ -342,8 +332,8 @@ def create_training():
         )
 
         return jsonify({
-            "message": "Task started...",
-            "task_id": task.id,
+            "message": "Training started...",
+            "training_id": training.id,
             "model_name": new_model.name
         }), 202
 
@@ -351,64 +341,6 @@ def create_training():
         app.logger.error(f"Error in create_training: {str(e)}")
         app.logger.error(traceback.format_exc())
         return jsonify({"status": "error", "message": str(e)}), 500
-
-@celery.task
-def async_train(model_id, training_input):
-    try:
-        # Print out the training input for debugging
-        # app.logger.info(f"Training input: {training_input}")
-
-        training = replicate.trainings.create(
-            version=training_input["version"],
-            input=training_input["input"],
-            destination=training_input["destination"]
-        )
-        app.logger.info(f"Training created: {training}")
-        return {
-            'id': training.id,
-            'status': training.status,
-            'created_at': training.created_at,
-            'completed_at': training.completed_at,
-            'error': str(training.error) if training.error else None,
-            'input': training.input,
-            'output': training.output,
-            'logs': training.logs,
-            'urls': training.urls
-        }
-    except ReplicateError as e:
-        app.logger.error(f"Replicate Error: {str(e)}")
-        return {'error': str(e)}
-    except Exception as e:
-        # remove model from db using model_id
-        SupabaseModels.delete_model_by_id(model_id)
-        app.logger.error(f"Unexpected error in async_train: {str(e)}")
-        return {'error': f"Unexpected error: {str(e)}"}
-
-@app.route('/training_status/<task_id>')
-@jwt_required()
-def check_training_status(task_id):
-    task = async_train.AsyncResult(task_id)
-    if task.state == 'PENDING':
-        response = {
-            'state': task.state,
-            'status': 'Task is pending...'
-        }
-    elif task.state == 'SUCCESS':
-        training_data = task.result
-        response = {
-            'state': task.state,
-            'status': training_data['status'],
-            'id': training_data['id'],
-            'created_at': training_data['created_at'],
-            'completed_at': training_data['completed_at'],
-            'error': training_data['error']
-        }
-    else:
-        response = {
-            'state': task.state,
-            'status': str(task.info),
-        }
-    return jsonify(response)
 
 # -------- user stuff --------
 @app.route('/allusers')

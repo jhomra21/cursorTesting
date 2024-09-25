@@ -10,6 +10,7 @@ import { Input } from "./ui/input"
 import { Slider } from "./ui/slider"
 import { useToast } from "@/hooks/use-toast"
 import { Card } from './ui/card';
+import JSZip from 'jszip';
 
 const formSchema = z.object({
   steps: z.number().min(100).max(1000),
@@ -33,18 +34,30 @@ const CreateTraining: React.FC = () => {
     },
   })
 
+  const compressAndZipImages = async (files: FileList): Promise<Blob> => {
+    const zip = new JSZip();
+    
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      // You might want to add image compression here before adding to zip
+      zip.file(file.name, file);
+    }
+    
+    return await zip.generateAsync({type: "blob"});
+  };
+
   const onSubmit = async (data: z.infer<typeof formSchema>) => {
     setIsLoading(true);
     setError(null);
 
-    const formData = new FormData();
-    formData.append('steps', data.steps.toString());
-    formData.append('triggerWord', data.triggerWord);
-    for (let i = 0; i < data.inputImages.length; i++) {
-      formData.append('inputImages', data.inputImages[i]);
-    }
-
     try {
+      const compressedZip = await compressAndZipImages(data.inputImages);
+
+      const formData = new FormData();
+      formData.append('steps', data.steps.toString());
+      formData.append('triggerWord', data.triggerWord);
+      formData.append('inputImages', compressedZip, 'images.zip');
+
       const token = localStorage.getItem('authToken');
       if (!token) {
         throw new Error('No authentication token found');
