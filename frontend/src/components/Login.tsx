@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useContext, useEffect } from 'react';
+import { AuthContext } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { User } from '../types';  // Make sure to import the User type
 import { useAuth } from '../hooks/useAuth';
@@ -24,6 +25,7 @@ const Login: React.FC = () => {
     const [error, setError] = useState('');
     const navigate = useNavigate();
     const { login, user } = useAuth();
+    const auth = useContext(AuthContext);
 
     useEffect(() => {
         if (user) {
@@ -35,11 +37,12 @@ const Login: React.FC = () => {
         e.preventDefault();
         setError('');
         try {
-            await login(email, password);
-            // No need to navigate here, the useEffect will handle it
+            await auth?.login(email, password);
+            console.log('Login successful');
+            // Redirect or update UI here
         } catch (error) {
-            console.error('Error during login:', error);
-            setError('Invalid email or password');
+            console.error('Login failed:', error);
+            // Show error message to user
         }
     };
 

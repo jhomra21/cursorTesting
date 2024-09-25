@@ -1,7 +1,7 @@
 import React, { createContext, useState, useEffect } from 'react';
 import { User } from '../types';
 import { supabase } from '../supabaseClient';
-import { Session } from '@supabase/supabase-js';
+
 
 interface AuthContextType {
   user: User | null;
@@ -17,42 +17,87 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const fetchSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setUser(session ? mapUser(session.user) : null);
+    const checkAuthStatus = async () => {
+      const token = localStorage.getItem('authToken');
+      if (token) {
+        try {
+          const response = await fetch('http://localhost:5000/verify-token', {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+          });
+
+          if (response.ok) {
+            const userData = await response.json();
+            setUser(userData);
+          } else {
+            // Token is invalid or expired
+            localStorage.removeItem('authToken');
+          }
+        } catch (error) {
+          console.error('Error verifying token:', error);
+        }
+      }
       setIsLoading(false);
     };
 
-    fetchSession();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session ? mapUser(session.user) : null);
-      setIsLoading(false);
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
+    checkAuthStatus();
   }, []);
 
-  const mapUser = (supabaseUser: any): User => ({
-    id: supabaseUser.id,
-    email: supabaseUser.email || '',
-    // Map any other properties you need
-  });
-
   const login = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-    if (data.user) {
-      setUser(mapUser(data.user));
+    try {
+      console.log('Attempting login...');
+      const response = await fetch('http://localhost:5000/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      console.log('Response status:', response.status);
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Login failed:', errorText);
+        throw new Error('Login failed');
+      }
+
+      const data = await response.json();
+      console.log('Login response:', data);
+      if (data.user && data.access_token) {
+        setUser(data.user);
+        localStorage.setItem('authToken', data.access_token);
+        console.log('User logged in successfully');
+      } else {
+        console.error('Unexpected response format:', data);
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      throw error;
     }
   };
 
   const logout = async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
-    setUser(null);
+    try {
+      const response = await fetch('http://localhost:5000/logout', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        localStorage.removeItem('authToken');
+        setUser(null);
+      } else {
+        throw new Error('Logout failed');
+      }
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
   };
 
   return (

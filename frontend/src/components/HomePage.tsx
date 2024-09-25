@@ -1,7 +1,6 @@
 import React from 'react';
-import { buttonVariants } from './ui/button';
-import { Link } from 'react-router-dom';
 import { User } from '../types';
+import { Link } from 'react-router-dom';
 
 interface HomePageProps {
     user: User | null;
@@ -9,18 +8,14 @@ interface HomePageProps {
 
 const HomePage: React.FC<HomePageProps> = ({ user }) => {
     return (
-        <div className="max-w-4xl mx-auto px-4 py-8 bg-white text-gray-800">
+        <div>
+            <h1>Welcome to Our App</h1>
             {user ? (
-                <div className="text-center">
-                    <p className="text-xl mb-4">You're logged in.</p>
-                </div>
+                <p>Hello, {user.username || user.email}!</p>
             ) : (
-                <div className="text-center">
-                    <p className="text-xl mb-4">Login to get started</p>
-                    <Link to="/login" className={buttonVariants({ variant: "outline" }) + " m-2 text-lg"}>Login</Link>
-                    <Link to="/register" className={buttonVariants({ variant: "outline" }) + " m-2 text-lg"}>Register</Link>
-                </div>
+                <p>Please <Link to="/login">log in</Link> to access all features.</p>
             )}
+            {/* Rest of your HomePage content */}
         </div>
     );
 };

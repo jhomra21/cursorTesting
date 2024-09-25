@@ -430,26 +430,23 @@ def all_users():
 
 # Add this new route for token verification
 @app.route('/verify-token', methods=['GET', 'OPTIONS'])
+@jwt_required()
 def verify_token():
     if request.method == 'OPTIONS':
         return '', 200
     
-    @jwt_required()
-    def get():
-        current_user_id = get_jwt_identity()
-        try:
-            response = supabase.table('users').select('id', 'username').eq('id', current_user_id).single().execute()
-            user = response.data
-            if user:
-                return jsonify({
-                    "id": user['id'],
-                    "username": user['username'],
-                }), 200
-            return jsonify({"msg": "User not found"}), 404
-        except Exception as e:
-            return jsonify({"error": str(e)}), 500
-    
-    return get()
+    current_user_id = get_jwt_identity()
+    try:
+        response = supabase.table('users').select('id', 'username').eq('id', current_user_id).single().execute()
+        user = response.data
+        if user:
+            return jsonify({
+                "id": user['id'],
+                "username": user['username'],
+            }), 200
+        return jsonify({"msg": "User not found"}), 404
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # Modify your login route to return a JWT token
 @app.route('/login', methods=['POST', 'OPTIONS'])
@@ -481,8 +478,11 @@ def login():
 
             return jsonify({
                 "message": "Logged in successfully",
-                "user_id": user.id,
-                "email": user.email,
+                "user": {
+                    "id": user.id,
+                    "email": user.email,
+                    # Add any other user properties you want to return
+                },
                 "access_token": access_token
             }), 200
         else:
@@ -497,9 +497,12 @@ def signup():
         return jsonify({"error": "Request must be JSON"}), 400
 
     data = request.get_json()
-    username = data.get('username')
     email = data.get('email')
     password = data.get('password')
+    username = data.get('username')
+    
+    if not email or not password or not username:
+        return jsonify({"error": "Email, password, and username are required"}), 400
     
     if len(password) < 8:
         return jsonify({'error': 'Password must be at least 8 characters long.'}), 400
@@ -521,12 +524,24 @@ def signup():
             }
         })
         
-        if user:
-            return jsonify({'message': 'Account created successfully. Please log in.'}), 201
+        if user.user:
+            # Create a JWT token
+            access_token = create_access_token(identity=str(user.user.id))
+
+            return jsonify({
+                'message': 'Account created successfully.',
+                'user': {
+                    'id': user.user.id,
+                    'email': user.user.email,
+                    'username': username
+                },
+                'access_token': access_token
+            }), 201
         else:
             return jsonify({'error': 'Failed to create account.'}), 500
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(f"Signup error: {str(e)}")
+        return jsonify({"error": "An error occurred during signup"}), 500
 
 # lemon squeezy sample product
 def get_variant_id(product_id):
@@ -651,6 +666,7 @@ def logout():
     if request.method == 'OPTIONS':
         return '', 200
     # Perform any server-side logout operations here
+    # Note: JWT tokens can't be invalidated server-side, so we rely on the client to remove the token
     return jsonify({"message": "Logged out successfully"}), 200
 
 @app.errorhandler(404)

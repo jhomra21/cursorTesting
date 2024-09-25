@@ -35,7 +35,11 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ user }) => {
 
     return (
         <div className='text-center'>
-            <h2>My Models</h2>
+            <Card className='pb-4'>
+                <CardHeader>
+                    <CardTitle>My Models</CardTitle>
+                </CardHeader>
+            
             {models === null ? (
                 <AnimatedGroup preset="blur" className="m-2 grid grid-flow-row grid-cols-1">
                     <Button disabled>
@@ -77,6 +81,7 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ user }) => {
                     </Button>
                 </AnimatedGroup>
             )}
+            </Card>
         </div>
     );
 };
