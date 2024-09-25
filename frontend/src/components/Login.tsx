@@ -1,8 +1,6 @@
-import React, { useState, useContext, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
-import { User } from '../types';  // Make sure to import the User type
-import { useAuth } from '../hooks/useAuth';
+import { useNavigate, Link } from 'react-router-dom';
 import { Button, buttonVariants } from './ui/button';
 import { Input } from './ui/input';
 import {
@@ -13,36 +11,35 @@ import {
     CardHeader,
     CardTitle,
 } from "@/components/ui/card"
-import { Link } from 'react-router-dom';
-
-interface LoginProps {
-    setIsAuthenticated: (isAuthenticated: boolean, userData: User) => void;
-}
 
 const Login: React.FC = () => {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const navigate = useNavigate();
-    const { login, user } = useAuth();
     const auth = useContext(AuthContext);
 
     useEffect(() => {
-        if (user) {
+        if (auth?.user) {
             navigate('/');
         }
-    }, [user, navigate]);
+    }, [auth, navigate]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError('');
-        try {
-            await auth?.login(email, password);
-            console.log('Login successful');
-            // Redirect or update UI here
-        } catch (error) {
-            console.error('Login failed:', error);
-            // Show error message to user
+        if (auth) {
+            try {
+                const { user, error } = await auth.login(email, password);
+                if (error) throw error;
+                if (user) {
+                    console.log('Login successful');
+                    navigate('/models');
+                }
+            } catch (error) {
+                console.error('Login failed:', error);
+                setError('Invalid email or password');
+            }
         }
     };
 
@@ -54,13 +51,12 @@ const Login: React.FC = () => {
                     <CardDescription>Please enter your details.</CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <form onSubmit={handleSubmit} >
+                    <form onSubmit={handleSubmit}>
                         <div className="mb-4">
                             <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="email">
                                 Email
                             </label>
                             <Input
-                                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
                                 id="email"
                                 type="email"
                                 placeholder="Email"
@@ -73,7 +69,6 @@ const Login: React.FC = () => {
                                 Password
                             </label>
                             <Input
-                                className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 mb-3 leading-tight focus:outline-none focus:shadow-outline"
                                 id="password"
                                 type="password"
                                 placeholder="******************"
@@ -88,7 +83,7 @@ const Login: React.FC = () => {
                     </form>
                 </CardContent>
                 <CardFooter>
-                    <p className="text-sm text-gray-500">Don't have an account? <Link className={buttonVariants({ variant: "outline" }) + " hover:bg-gray-900 hover:text-white"} to="/register">Register</Link></p>
+                    <p className="text-sm text-gray-500">Don't have an account? <Link className={buttonVariants({ variant: "outline" }) + " hover:bg-gray-900 hover:text-white"} to="/signup">Register</Link></p>
                 </CardFooter>
             </Card>
         </div>

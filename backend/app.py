@@ -38,7 +38,7 @@ app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)  # Set to 1 hour, ad
 app.config['JWT_TOKEN_LOCATION'] = ['headers']
 jwt = JWTManager(app)
 Session(app)
-WEBHOOK_SECRET = "whsec_V1ch24sYuN1xO2SqW4jX2EP8/NyCOASA"
+WEBHOOK_SECRET = "who?"
 
 # Supabase configuration
 SUPABASE_URL = os.getenv("SUPABASE_URL")
@@ -76,8 +76,10 @@ UPLOAD_FOLDER = 'input_images'
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg'}
 
 #TODO:   will be changed later and loaded from usr table in the database
-TRIGGER_WORD = "ramon"
+TRIGGER_WORD = ""
 NEW_MODEL_NAME = "jhonra121/ramon-lora-20240910-154729:dd117084cca97542e09f6a2a458295054b4afb0b97417db068c20ff573997fc9"
+
+REPLICATE_USER = "jhomra21"
 
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
@@ -137,30 +139,55 @@ def index():
     return jsonify({"message": "Welcome to the API"})
 
 # main route
-@app.route("/generate", methods=["POST"])
+@app.route("/generate", methods=["POST", "OPTIONS"])
 @jwt_required()
 def generate_image():
+    if request.method == 'OPTIONS':
+        return '', 200
+    
     if not request.is_json:
         return jsonify({"error": "Request must be JSON"}), 400
 
     data = request.get_json()
     prompt = data.get("prompt")
-    model_id = data.get("modelId")
+    model_id = data.get("model_id")
     num_inference_steps = data.get("num_inference_steps", 22)
     guidance_scale = data.get("guidance_scale", 3.5)
     lora_scale = data.get("lora_scale", 0.8)
 
-    if not prompt or not model_id:
-        return jsonify({"error": "Prompt and modelId are required"}), 400
+    if not prompt:
+        return jsonify({"error": "Prompt is required"}), 400
+
+    if not model_id:
+        return jsonify({"error": "Model ID is required"}), 400
 
     try:
+        app.logger.info(f"Received request with model_id: {model_id}")
+        
+        model_id = int(model_id)
+        
         model_response = SupabaseModels.get_model_by_id(model_id)
+        app.logger.info(f"Model response: {model_response}")
+        
         if not model_response.data:
             return jsonify({"error": "Model not found"}), 404
 
+        # Change this line
         model = model_response.data
-        version = replicate.models.get(model['name']).versions.get(model['model_version'])
+        app.logger.info(f"Model data: {model}")
+        
+        if 'name' not in model or 'model_version' not in model:
+            return jsonify({"error": "Invalid model data"}), 500
 
+        # Use the model_version from the database
+        model_version = model['model_version']
+        model_name = model['name']
+        app.logger.info(f"Model name: {model_name}")
+        app.logger.info(f"Model version: {model_version}")
+        version = replicate.models.get(model['name']).versions.get(model['model_version'])
+        app.logger.info(f"Version: {version}")
+        # version = f'jhomra21/{model_name}:{model_version}'
+        # Run the model
         output = replicate.run(
             version,
             input={
@@ -175,12 +202,13 @@ def generate_image():
                 "num_inference_steps": num_inference_steps
             }
         )
-        output = list(output)  # Convert iterator to list
+        output = list(output)
+
         image_url = output[0] if output else None
         
         if not image_url:
             return jsonify({"error": "Failed to generate image"}), 500
-
+        
         return jsonify({
             "image_url": image_url,
             "predict_time": None,
@@ -189,9 +217,16 @@ def generate_image():
             "num_inference_steps": num_inference_steps,
             "lora_scale": lora_scale
         })
+    except ValueError as ve:
+        app.logger.error(f"ValueError in generate_image: {str(ve)}")
+        return jsonify({"error": f"Invalid input: {str(ve)}"}), 400
+    except KeyError as ke:
+        app.logger.error(f"KeyError in generate_image: {str(ke)}")
+        return jsonify({"error": f"Missing key in data: {str(ke)}"}), 500
     except Exception as e:
         app.logger.error(f"Error in generate_image: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        app.logger.error(traceback.format_exc())
+        return jsonify({"error": f"An unexpected error occurred: {str(e)}"}), 500
 
 def get_latest_trigger_word():
     # Implement this function to retrieve the latest trigger word
@@ -214,17 +249,17 @@ def training_processing(training_id):
         response_data = {
             "training_id": training.id,
             "status": status,
-            "elapsed_time": elapsed_time
+            "elapsed_time": elapsed_time,
+            "logs": training.logs,
+            "output": training.output
         }
 
         if status in ['failed', 'canceled']:
             log_training_status(training.id, status)
             try:
-                # Safely access trigger_word and handle potential None values
                 trigger_word = training.input.get('trigger_word', '') if training.input else ''
                 created_at = training.created_at
                 
-                # Construct the model name
                 if isinstance(created_at, str):
                     model_name = f"{trigger_word}-lora-{created_at}"
                 elif created_at:
@@ -232,14 +267,12 @@ def training_processing(training_id):
                 else:
                     model_name = f"{trigger_word}-lora-unknown"
 
-                response = supabase.table('models').update({
-                    'status': status
-                }).eq('name', model_name).execute()
+                response = supabase.table('models').delete().eq('name', model_name).execute()
                 
                 if not response.data:
                     log_error(f"Failed to update model status in Supabase for training: {training.id}")
             except Exception as e:
-                log_error(f"Error updating model status in Supabase: {str(e)}")
+                log_error(f"Error deleting model from Supabase: {str(e)}")
             return jsonify(response_data)
         
         elif status == 'succeeded':
@@ -252,6 +285,7 @@ def training_processing(training_id):
                     update_model_in_supabase(current_user_id, model.id, latest_version.id, status)
                     response_data["model_id"] = model.id
                     response_data["model_version"] = latest_version.id
+                    response_data["redirect"] = f"/generate/{model.id}"
                 else:
                     log_training_status(training.id, "No version available")
             else:
@@ -261,8 +295,8 @@ def training_processing(training_id):
         
         else:
             response_data["created_at"] = training.created_at if training.created_at else ""
-            cancel_url = getattr(training.urls, 'cancel', None) if status in ['starting', 'processing'] else None
-            response_data["cancel_url"] = str(cancel_url) if cancel_url is not None else ""
+            cancel_url = str(getattr(training.urls, 'cancel', None)) if status in ['starting', 'processing'] else ""
+            response_data["cancel_url"] = cancel_url
             return jsonify(response_data)
 
     except Exception as e:
@@ -337,7 +371,7 @@ def create_training():
 
         # Create a new model on Replicate
         new_model = replicate.models.create(
-            owner="jhomra21",
+            owner=REPLICATE_USER,
             name=f"{trigger_word}-lora-" + datetime.now().strftime("%Y%m%d-%H%M%S"),
             visibility="private",
             hardware="gpu-a100-large"
@@ -364,13 +398,13 @@ def create_training():
         training = replicate.trainings.create(
             version="ostris/flux-dev-lora-trainer:885394e6a31c6f349dd4f9e6e7ffbabd8d9840ab2559ab78aed6b2451ab2cfef",
             input=training_input,
-            destination=f"jhomra21/{new_model.name}"
+            destination=REPLICATE_USER+'/'+new_model.name
         )
 
         # Store the training information in the database
         SupabaseModels.insert_model(
             user_id=current_user_id,
-            name=new_model.name,
+            name=REPLICATE_USER+'/'+new_model.name,
             description=f"Training for {trigger_word}",
             model_version='',  # This will be updated when training is complete
             status="pending"

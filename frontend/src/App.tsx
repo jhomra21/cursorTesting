@@ -7,6 +7,7 @@ import ModelsPage from './components/ModelsPage';
 import CreateTraining from './components/CreateTraining';
 import { Toaster } from './components/ui/toaster';
 import { User } from './types';
+import GenerateImage from './components/GenerateImage';
 
 const App: React.FC = () => {
     return (
@@ -72,7 +73,7 @@ const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
             </main>
             <footer className="bg-white border-t border-gray-200">
                 <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-                    <p className="text-center text-sm text-gray-500">© 2023 Your Company. All rights reserved.</p>
+                    <p className="text-center text-sm text-gray-500">© 2024 juan-testing. All rights reserved.</p>
                 </div>
             </footer>
         </div>
@@ -101,6 +102,10 @@ const AppContent: React.FC = () => {
             <Route 
                 path="/create-training" 
                 element={auth.user ? <CreateTraining /> : <Navigate to="/login" />}
+            />
+            <Route 
+                path="/generate/:modelId" 
+                element={auth.user ? <GenerateImage user={auth.user} onLogout={auth.logout} /> : <Navigate to="/login" />}
             />
             {/* Add any other routes here */}
         </Routes>

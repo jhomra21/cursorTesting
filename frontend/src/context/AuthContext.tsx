@@ -1,108 +1,87 @@
 import React, { createContext, useState, useEffect } from 'react';
 import { User } from '../types';
-import { supabase } from '../supabaseClient';
+import { createClient, SupabaseClient, Session, User as SupabaseUser } from '@supabase/supabase-js';
 
+// Initialize Supabase client
+const supabase: SupabaseClient = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+);
 
 interface AuthContextType {
-  user: User | null;
-  login: (email: string, password: string) => Promise<void>;
-  logout: () => Promise<void>;
-  isLoading: boolean;
+    user: User | null;
+    token: string | null;
+    login: (email: string, password: string) => Promise<{ user: User | null; error: Error | null }>;
+    logout: () => Promise<void>;
+    isLoading: boolean;
+    models: any[]; // Add proper type if available
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+    const [user, setUser] = useState<User | null>(null);
+    const [token, setToken] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [models, setModels] = useState<any[]>([]);
 
-  useEffect(() => {
-    const checkAuthStatus = async () => {
-      const token = localStorage.getItem('authToken');
-      if (token) {
-        try {
-          const response = await fetch('http://localhost:5000/verify-token', {
-            method: 'GET',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-          });
+    useEffect(() => {
+        const initializeAuth = async () => {
+            // Check for existing session
+            const { data: { session } } = await supabase.auth.getSession();
+            updateSessionState(session);
 
-          if (response.ok) {
-            const userData = await response.json();
-            setUser(userData);
-          } else {
-            // Token is invalid or expired
-            localStorage.removeItem('authToken');
-          }
-        } catch (error) {
-          console.error('Error verifying token:', error);
-        }
-      }
-      setIsLoading(false);
+            // Listen for auth changes
+            const { data: { subscription } } = supabase.auth.onAuthStateChange(
+                async (event, session) => {
+                    updateSessionState(session);
+                }
+            );
+
+            return () => {
+                subscription.unsubscribe();
+            };
+        };
+
+        initializeAuth();
+    }, []);
+
+    const updateSessionState = (session: Session | null) => {
+        setUser(convertSupabaseUser(session?.user ?? null));
+        setToken(session?.access_token ?? null);
+        setIsLoading(false);
     };
 
-    checkAuthStatus();
-  }, []);
+    const convertSupabaseUser = (supabaseUser: SupabaseUser | null): User | null => {
+        if (!supabaseUser) return null;
+        return {
+            id: supabaseUser.id,
+            email: supabaseUser.email ?? '',
+            // Add other necessary fields from your User type
+        };
+    };
 
-  const login = async (email: string, password: string) => {
-    try {
-      console.log('Attempting login...');
-      const response = await fetch('http://localhost:5000/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
-      });
+    const login = async (email: string, password: string) => {
+        try {
+            const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+            if (error) throw error;
+            return { user: convertSupabaseUser(data.user), error: null };
+        } catch (error) {
+            console.error('Login error:', error);
+            return { user: null, error: error as Error };
+        }
+    };
 
-      console.log('Response status:', response.status);
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Login failed:', errorText);
-        throw new Error('Login failed');
-      }
-
-      const data = await response.json();
-      console.log('Login response:', data);
-      if (data.user && data.access_token) {
-        setUser(data.user);
-        localStorage.setItem('authToken', data.access_token);
-        console.log('User logged in successfully');
-      } else {
-        console.error('Unexpected response format:', data);
-      }
-    } catch (error) {
-      console.error('Login error:', error);
-      throw error;
-    }
-  };
-
-  const logout = async () => {
-    try {
-      const response = await fetch('http://localhost:5000/logout', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (response.ok) {
-        localStorage.removeItem('authToken');
+    const logout = async () => {
+        await supabase.auth.signOut();
         setUser(null);
-      } else {
-        throw new Error('Logout failed');
-      }
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
-  };
+        setToken(null);
+        setModels([]);
+    };
 
-  return (
-    <AuthContext.Provider value={{ user, login, logout, isLoading }}>
-      {children}
-    </AuthContext.Provider>
-  );
+    return (
+        <AuthContext.Provider value={{ user, token, login, logout, isLoading, models }}>
+            {children}
+        </AuthContext.Provider>
+    );
 };

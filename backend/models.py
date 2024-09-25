@@ -127,7 +127,9 @@ class SupabaseModels:
         return supabase.table("models").insert(data).execute()
     @staticmethod
     def get_model_by_id(model_id):
-        return supabase.table('models').select('*').eq('id', model_id).single().execute()
+        response = supabase.table('models').select('*').eq('id', model_id).single().execute()
+        print(f"Supabase response for model_id {model_id}: {response}")  # Add this line for debugging
+        return response
 
     @staticmethod
     def get_models_by_user_id(user_id):

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { User, Model } from '../types';
 import { Button } from './ui/button';
@@ -6,24 +6,25 @@ import { Input } from './ui/input';
 import { Slider } from './ui/slider';
 import { DownloadIcon, ReloadIcon } from '@radix-ui/react-icons';
 import { AnimatedGroup } from './core/animatedGroup';
+import { AuthContext } from '../context/AuthContext';
+import { supabase } from '../supabaseClient';
 
 interface GenerateImageProps {
-    user: User; // Changed from User | null to User
-    models: Model[];
+    user: User;
     onLogout: () => void;
 }
 
-const GenerateImage: React.FC<GenerateImageProps> = ({ user, models, onLogout }) => {
+const GenerateImage: React.FC<GenerateImageProps> = ({ user, onLogout }) => {
+    const auth = useContext(AuthContext);
     const [prompt, setPrompt] = useState('');
     const [imageUrl, setImageUrl] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [loraScale, setLoraScale] = useState(0.8);
     const [guidanceScale, setGuidanceScale] = useState(3.5);
     const [inferenceSteps, setInferenceSteps] = useState(22);
+    const [model, setModel] = useState<Model | null>(null);
     const { modelId } = useParams<{ modelId: string }>();
     const navigate = useNavigate();
-
-    const model = models.find(m => m.id.toString() === modelId);
 
     useEffect(() => {
         if (!user) {
@@ -31,28 +32,58 @@ const GenerateImage: React.FC<GenerateImageProps> = ({ user, models, onLogout })
         }
     }, [user, navigate]);
 
+    useEffect(() => {
+        const fetchModel = async () => {
+            if (!modelId) return;
+
+            try {
+                const { data, error } = await supabase
+                    .from('models')
+                    .select('*')
+                    .eq('id', modelId)
+                    .single();
+
+                if (error) throw error;
+                setModel(data);
+            } catch (error) {
+                console.error('Error fetching model:', error);
+                navigate('/models');
+            }
+        };
+
+        fetchModel();
+    }, [modelId, navigate]);
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
+
+        if (!model) {
+            console.error('Model not found');
+            setIsLoading(false);
+            return;
+        }
 
         try {
             const response = await fetch('http://localhost:5000/generate', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${auth?.token}`
                 },
-                credentials: 'include',
                 body: JSON.stringify({ 
-                    prompt, 
-                    modelId, 
-                    loraScale, 
-                    guidanceScale, 
-                    inferenceSteps 
+                    model_id: model.id, // Ensure this is correct
+                    prompt: prompt,
+                    lora_scale: loraScale,
+                    guidance_scale: guidanceScale,
+                    num_inference_steps: inferenceSteps
                 }),
             });
 
             if (!response.ok) {
-                throw new Error('Failed to generate image');
+                const errorData = await response.json();
+                console.error('Server response:', errorData);
+                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
             }
 
             const data = await response.json();
@@ -66,7 +97,7 @@ const GenerateImage: React.FC<GenerateImageProps> = ({ user, models, onLogout })
     };
 
     const handleBackToModels = () => {
-        navigate('/');
+        navigate('/models');
     };
 
     const handleDownload = async () => {
@@ -87,7 +118,7 @@ const GenerateImage: React.FC<GenerateImageProps> = ({ user, models, onLogout })
     };
 
     return (
-        <div className="max-w-md mx-auto mt-8">
+        <div className="max-w-md mx-auto mt-8 relative">
             <div className="flex justify-between items-center mb-4">
                 <h2 className="text-2xl font-bold">Generate Image</h2>
                 <div>
@@ -108,7 +139,7 @@ const GenerateImage: React.FC<GenerateImageProps> = ({ user, models, onLogout })
                 </div>
             </div>
             {model && <p className="mb-4">Model: {model.name}</p>}
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form onSubmit={handleSubmit} className={`space-y-4 ${isLoading ? 'opacity-50 pointer-events-none' : ''}`}>
                 <div>
                     <label htmlFor="prompt" className="block text-sm font-medium text-gray-700">
                         Prompt
@@ -166,9 +197,15 @@ const GenerateImage: React.FC<GenerateImageProps> = ({ user, models, onLogout })
                     disabled={isLoading}
                     className="w-full"
                 >
-                    {isLoading ? <ReloadIcon className="mr-2 h-4 w-4 animate-spin" /> : 'Generate Image'}
+                    Generate Image
                 </Button>
             </form>
+            {isLoading && (
+                <div className="absolute inset-0 flex items-center justify-center bg-white bg-opacity-75 z-10">
+                    <ReloadIcon className="h-8 w-8 animate-spin text-gray-700" />
+                    <span className="ml-2 text-lg font-semibold text-gray-700">Generating...</span>
+                </div>
+            )}
             {imageUrl && (
                 <AnimatedGroup preset="blur">
                 <div className="mt-8 relative group">

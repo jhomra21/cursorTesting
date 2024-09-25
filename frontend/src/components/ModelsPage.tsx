@@ -37,7 +37,7 @@ const ModelsPage: React.FC<ModelsPageProps> = ({ user }) => {
         <div className='text-center'>
             <Card className='pb-4'>
                 <CardHeader>
-                    <CardTitle>My Models</CardTitle>
+                    <CardTitle>{user.email} Models</CardTitle>
                 </CardHeader>
             
             {models === null ? (
